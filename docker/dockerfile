@@ -7,7 +7,11 @@ ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && pip install --no-cache-dir -r /app/requirements.txt \
+    && apt-get purge -y --auto-remove build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY grott.py grottconf.py grottdata.py grottlayout.py grottproxy.py grottsniffer.py grottserver.py /app/
 COPY examples/grott.ini /app/grott.ini

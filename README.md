@@ -6,7 +6,18 @@
 
 ### Grott HA Docker Fork Beta
 
-This fork preserves upstream Grott history and adds guarded layout selection for Docker and Home Assistant add-on users.
+This is a true fork of [`johanmeijer/grott`](https://github.com/johanmeijer/grott), with the upstream history kept intact. I forked it because the problem in upstream issue [#697](https://github.com/johanmeijer/grott/issues/697) matched what I was seeing in a real Home Assistant setup: ShineWiFi/Growatt dataloggers stayed online, but Grott stopped turning their packets into useful live telemetry around the same daytime window. The upstream project still exists, but this fork is meant to provide a maintained, installable Home Assistant and Docker build for people who need this fixed now.
+
+What this fork changes since the fork point:
+
+- Adds guarded layout selection so Grott can try the configured inverter family, reject implausible parses, and fall back to safer generic layouts instead of publishing empty or nonsense sensors.
+- Carries the practical fix for affected ShineWiFi/Growatt telemetry: proxy mode, `blockcmd=True`, `time=server`, and `sendbuf=False` are the recommended defaults.
+- Packages Grott as a Home Assistant add-on repository with MQTT discovery enabled by default.
+- Publishes prebuilt GHCR images for Docker and Home Assistant so HA boxes do not have to build Grott locally.
+- Cleans up Home Assistant MQTT discovery keys so invalid names do not create broken entities.
+- Adds a dry-run first helper for clearing stale retained Grott discovery topics during migration.
+- Adds tests and sanitized packet/layout fixtures for generic, SPH, SPA, TL3, and MIN style layouts.
+- Documents the upstream license gap instead of pretending it is settled.
 
 Home Assistant add-on install:
 
@@ -20,14 +31,14 @@ https://github.com/Herbertmt978/grott
 3. Install **Grott HA Docker**.
 4. Point each Growatt/ShineWiFi datalogger at your Home Assistant host on port `5279`.
 
-The current beta release is [`v0.1.1-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.1-beta). The add-on uses the prebuilt GHCR image `ghcr.io/herbertmt978/grott-ha-docker`, so Home Assistant should not need to build it locally. Current prebuilt images cover `aarch64`, `amd64`, `armv7`, and `i386`; `armhf` is not advertised until we have a reliable ARMv6 image path.
+The current beta release is [`v0.1.2-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.2-beta). The add-on uses the prebuilt GHCR image `ghcr.io/herbertmt978/grott-ha-docker`, so Home Assistant should not need to build it locally. Current prebuilt images cover `aarch64`, `amd64`, `armv7`, and `i386`; `armhf` is not advertised until we have a reliable ARMv6 image path.
 
 Docker users can run the matching runtime image:
 
 ```yaml
 services:
   grott:
-    image: ghcr.io/herbertmt978/grott:0.1.1-beta
+    image: ghcr.io/herbertmt978/grott:0.1.2-beta
     container_name: grott
     restart: unless-stopped
     ports:

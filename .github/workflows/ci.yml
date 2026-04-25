@@ -34,6 +34,12 @@ jobs:
       - name: Run tests
         run: pytest tests "examples/Home Assistent/test_grott_ha.py" -q
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
       - name: Build Docker runtime image
         uses: docker/build-push-action@v7
         with:
@@ -41,3 +47,12 @@ jobs:
           file: docker/dockerfile
           push: false
           tags: grott:test
+
+      - name: Build Docker runtime image for i386
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/dockerfile
+          platforms: linux/386
+          push: false
+          tags: grott:i386-test

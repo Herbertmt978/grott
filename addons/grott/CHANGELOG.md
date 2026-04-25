@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2-beta
+
+- Add temporary compiler tooling during Docker image builds so dependencies can build on architectures without wheels.
+
 ## 0.1.1-beta
 
 - Publish prebuilt GHCR images for Docker and the Home Assistant add-on.

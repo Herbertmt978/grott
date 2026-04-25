@@ -2,6 +2,7 @@
 # author Etienne G.
 
 import json
+import re
 from datetime import datetime, timezone
 
 from paho.mqtt.publish import single, multiple
@@ -492,11 +493,36 @@ mapping = {
 }
 
 
+def normalize_key(key: str) -> str:
+    key = str(key).strip().lstrip("#")
+    key = re.sub(r"\s+", "_", key)
+    key = re.sub(r"[^A-Za-z0-9_]", "_", key)
+    key = re.sub(r"_+", "_", key).strip("_")
+    return key or "unknown"
+
+
+def normalize_values(values):
+    normalized = {}
+    for key, value in values.items():
+        normalized[normalize_key(key)] = value
+    return normalized
+
+
+def layout_entry_for_key(layout, key):
+    if key in layout:
+        return layout[key]
+    for candidate_key, spec in layout.items():
+        if normalize_key(candidate_key) == key:
+            return spec
+    return None
+
+
 def make_payload(conf: Conf, device: str, name: str, key: str, unit: str = None):
+    safe_key = normalize_key(key)
     # Default configuration payload
     payload = {
         "name": "{name}",
-        "unique_id": f"grott_{device}_{key}",  # Generate a unique device ID
+        "unique_id": f"grott_{device}_{safe_key}",  # Generate a unique device ID
         "state_topic": f"homeassistant/grott/{device}/state",
         "device": {
             "identifiers": [device],  # Group under a device
@@ -506,26 +532,27 @@ def make_payload(conf: Conf, device: str, name: str, key: str, unit: str = None)
     }
 
     # If there's a custom mapping add the new values
-    if key in mapping:
-        payload.update(mapping[key])
+    if safe_key in mapping:
+        payload.update(mapping[safe_key])
 
     # Reuse the existing divide value if available and not existing
     # and apply it to the HA config
     layout = conf.recorddict[conf.layout]
-    if "value_template" not in payload and key in layout:
+    layout_entry = layout_entry_for_key(layout, safe_key)
+    if "value_template" not in payload and layout_entry:
         # From grottdata:207, default type is num, also process numx
-        if layout[key].get("type", "num") in ("num", "numx") and layout[key].get(
-            "divide", "1"
-        ):
+        if layout_entry.get("type", "num") in ("num", "numx") and layout_entry.get("divide", "1"):
             payload[
                 "value_template"
             ] = "{{{{ value_json.{key} | float / {divide} }}}}".format(
-                key=key,
-                divide=layout[key].get("divide"),
+                key=safe_key,
+                divide=layout_entry.get("divide"),
             )
 
     if "value_template" not in payload:
-        payload["value_template"] = f"{{{{ value_json.{key} }}}}"
+        payload["value_template"] = f"{{{{ value_json.{safe_key} }}}}"
+
+    payload["name"] = f"{device} {payload['name'].format(name=name)}"
 
     return payload
 
@@ -603,7 +630,7 @@ def grottext(conf: Conf, data: str, jsonmsg: str):
         return 5
 
     device_serial = jsonmsg["device"]
-    values = jsonmsg["values"]
+    values = normalize_values(jsonmsg["values"])
 
     # Send the last push in UTC with TZ
     dt = datetime.now(timezone.utc)
@@ -617,8 +644,9 @@ def grottext(conf: Conf, data: str, jsonmsg: str):
         configs_payloads = []
         print(f"\tGrott HA {__version__} - creating {device_serial} config in HA")
         for key in values.keys():
+            safe_key = normalize_key(key)
             # Generate a configuration payload
-            payload = make_payload(conf, device_serial, key, key)
+            payload = make_payload(conf, device_serial, safe_key, safe_key)
             if not payload:
                 print(f"\t[Grott HA] {__version__} skipped key: {key}")
                 continue
@@ -627,7 +655,7 @@ def grottext(conf: Conf, data: str, jsonmsg: str):
                 topic = config_topic.format(
                     sensor_type="sensor",
                     device=device_serial,
-                    attribut=key,
+                    attribut=safe_key,
                 )
                 configs_payloads.append(
                     {
@@ -642,28 +670,6 @@ def grottext(conf: Conf, data: str, jsonmsg: str):
                 )
                 return 6
 
-        # Create a virtual last_push key to allow tracking when there was the last data transmission
-
-        try:
-            key = "grott_last_push"
-            payload = make_payload(conf, device_serial, key, key)
-            topic = config_topic.format(
-                sensor_type="sensor",
-                device=device_serial,
-                attribut=key,
-            )
-            configs_payloads.append(
-                {
-                    "topic": topic,
-                    "payload": json.dumps(payload),
-                    "retain": True,
-                }
-            )
-        except Exception as e:
-            print(
-                f"\t - [grott HA] {__version__} Exception while creating new sensor last push: {e}"
-            )
-            return 4
         publish_multiple(conf, configs_payloads)
         # Now it's configured, no need to come back
         MqttStateHandler.set_configured(device_serial)

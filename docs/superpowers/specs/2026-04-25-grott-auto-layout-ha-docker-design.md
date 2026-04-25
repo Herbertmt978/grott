@@ -42,6 +42,45 @@ The HA MQTT plugin publishes retained discovery configs. When a bad layout creat
 
 The core Grott repo and the HA add-on repo are separate. The add-on packages Grott plus `grott-ha-plugin`, while Docker images may not include that plugin. Users can end up with different behavior depending on how Grott is installed.
 
+## Upstream Issue Triage
+
+The first implementation should fix problems that share the same root cause as the observed deployment: packets are still arriving, but layout selection, record handling, or HA discovery makes the data disappear or look wrong.
+
+Issues in direct first-release scope:
+
+- [#697](https://github.com/johanmeijer/grott/issues/697) reports multiple ShineWiFi loggers stopping normal telemetry around the same late-morning window while Grott still receives short command or buffered records. This supports defaulting documented proxy deployments to `time=server`, `sendbuf=False`, and command blocking, plus adding safer handling for post-cutoff record types.
+- [#409](https://github.com/johanmeijer/grott/issues/409), [#676](https://github.com/johanmeijer/grott/issues/676), [#668](https://github.com/johanmeijer/grott/issues/668), and [#698](https://github.com/johanmeijer/grott/issues/698) all point at wrong or missing values when a layout family is guessed manually. These belong with candidate scoring and wrong-family rejection.
+- [#711](https://github.com/johanmeijer/grott/issues/711) shows a newer 586-byte `0242` MIC packet where the cloud path still works but local parsing fails. The first release should not promise full `0242` support without fixtures, but it should make unknown layout diagnostics and external layout additions easier.
+- [#702](https://github.com/johanmeijer/grott/issues/702) reports a `T06NNNNXTL3` keyword-processing failure that stops MQTT publication. Dry-run parsing and per-key parse errors should make one bad key unable to kill the whole packet.
+- [#700](https://github.com/johanmeijer/grott/issues/700) is a concrete Home Assistant discovery bug caused by illegal MQTT discovery topic keys such as `pactogrids ` and `battemp `. This is safe first-release scope: sanitize discovery keys and normalize layout key names without publishing duplicate sensors.
+- [#387](https://github.com/johanmeijer/grott/issues/387) and [#620](https://github.com/johanmeijer/grott/issues/620) reinforce that HA MQTT discovery needs stable unique IDs, legal topics, bounded discovery churn, and conservative retained-topic cleanup.
+- [#705](https://github.com/johanmeijer/grott/issues/705), [#714](https://github.com/johanmeijer/grott/pull/714), and [#716](https://github.com/johanmeijer/grott/pull/716) support improving Docker mode/env handling and image builds as part of the fork packaging work.
+
+Issues to keep as second-phase scope:
+
+- [#683](https://github.com/johanmeijer/grott/issues/683), [#712](https://github.com/johanmeijer/grott/issues/712), and [#713](https://github.com/johanmeijer/grott/issues/713) focus on GrottServer command APIs and inverter registry state. They are important, but the first release should not mix command/control refactors into the telemetry parser and HA discovery fix.
+- [#662](https://github.com/johanmeijer/grott/issues/662), [#677](https://github.com/johanmeijer/grott/issues/677), and related SPF/WIT support issues need device-specific fixtures before publishing confident mappings.
+
+## HenryJanssen Fork Review
+
+[`HenryJanssen/grott`](https://github.com/HenryJanssen/grott) is a true fork of upstream. Its `master` and `Beta-(2.8.x)` branches currently match upstream; the active work is on `Alpha`, last pushed on 2026-01-03.
+
+Useful ideas to carry forward:
+
+- Move layout dictionaries out of `grottconf.py` into JSON under `recorddict/`, making new layout support reviewable and testable without editing a very large Python dictionary.
+- Add an `alodict/` concept for register-group based auto-layout generation. This is directionally aligned with the goal of handling new firmware layouts, including packets like issue #711.
+- Track datalogger and inverter registry state in GrottServer so command APIs can resolve inverter IDs more reliably in a future phase.
+- Add register metadata JSON and a conversion/import tool so known datalogger and inverter registers can be documented as data rather than scattered code.
+
+Changes not to copy wholesale into the first release:
+
+- The `Alpha` branch is a broad GrottServer/UI refactor with Flask, login, register pages, `waitress`, and command routing changes. That is useful second-phase material but too much blast radius for the parser/HA packaging fix.
+- It commits a large `grott.log`, static site assets, a hard-coded Flask secret, and a `requires-python >=3.14` package requirement. Those should not be imported.
+- The `Alpha` branch does not fix the observed `0103` fallback because `datarec` remains `["04", "50"]`.
+- The copied SPA layout still contains keys with trailing spaces such as `pactogrids ` and `battemp `, so it does not solve issue #700 by itself.
+
+First-release decision: use Henry's external-layout and register-group ideas in the plan, but implement them incrementally behind tests. Do not merge or cherry-pick the full `Alpha` branch.
+
 ## Proposed Architecture
 
 The fork keeps Grott as the core parser and proxy. A new layout-selection layer sits between header detection and value extraction. It receives packet metadata, decrypted payload, configured preferences, and available layouts, then returns a selected layout with confidence and diagnostic reasons.

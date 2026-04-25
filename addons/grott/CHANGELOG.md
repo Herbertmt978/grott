@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6-beta
+
+- Skip low-confidence inverter records before MQTT, PVOutput, InfluxDB, or Home Assistant extension publishing.
+- Keep smart-meter records on the older tolerant path while inverter layouts are guarded by `layout_min_score`.
+
 ## 0.1.5-beta
 
 - Redact extension variables, PVOutput API keys, and other secret-shaped values from verbose logs.

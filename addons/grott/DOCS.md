@@ -6,7 +6,7 @@ This add-on uses the prebuilt GHCR image `ghcr.io/herbertmt978/grott-ha-docker`.
 
 This release is beta software. It has been tested with a real ShineWiFi/SPH Home Assistant setup and the packet fixtures in the repository, but other Growatt inverter families may still need new sanitized fixtures before every sensor is correct.
 
-`0.1.1-beta` was skipped for users because its first multi-architecture image publish failed. Install `0.1.5-beta` or newer.
+`0.1.1-beta` was skipped for users because its first multi-architecture image publish failed. Install `0.1.6-beta` or newer.
 
 ## Recommended Setup
 

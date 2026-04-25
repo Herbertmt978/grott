@@ -1,9 +1,9 @@
 ARG BUILD_FROM=python:3.11-slim
 FROM ${BUILD_FROM}
 
-ARG BUILD_VERSION=0.1.5-beta
+ARG BUILD_VERSION=0.1.6-beta
 ARG GROTT_REPO=https://github.com/Herbertmt978/grott.git
-ARG GROTT_REF=v0.1.5-beta
+ARG GROTT_REF=v0.1.6-beta
 
 LABEL \
     io.hass.version="${BUILD_VERSION}" \

@@ -1,0 +1,155 @@
+[
+  {
+    "name": "sph hybrid storage packet",
+    "family": "sph",
+    "header": "0000000600000104",
+    "ndata": 585,
+    "current_layout": "T06NNNNX",
+    "expected_layout": "T06NNNNXSPH",
+    "layouts": {
+      "T06NNNNX": {
+        "decrypt": {"value": "True"},
+        "datalogserial": {"value": 16, "length": 10, "type": "text", "incl": "yes"},
+        "pvserial": {"value": 76, "length": 10, "type": "text"},
+        "pvstatus": {"value": 158, "length": 2, "type": "num"},
+        "pvpowerin": {"value": 162, "length": 4, "type": "num", "divide": 10},
+        "pvpowerout": {"value": 250, "length": 4, "type": "numx", "divide": 10},
+        "pvfrequentie": {"value": 258, "length": 2, "type": "num", "divide": 100},
+        "pvgridvoltage": {"value": 262, "length": 2, "type": "num", "divide": 10}
+      },
+      "T06NNNNXSPH": {
+        "decrypt": {"value": "True"},
+        "datalogserial": {"value": 16, "length": 10, "type": "text", "incl": "yes"},
+        "pvserial": {"value": 76, "length": 10, "type": "text"},
+        "pvstatus": {"value": 158, "length": 2, "type": "num"},
+        "pvpowerin": {"value": 162, "length": 4, "type": "num", "divide": 10},
+        "pvpowerout": {"value": 298, "length": 4, "type": "numx", "divide": 10},
+        "pvfrequentie": {"value": 306, "length": 2, "type": "num", "divide": 100},
+        "pvgridvoltage": {"value": 310, "length": 2, "type": "num", "divide": 10},
+        "SOC": {"value": 722, "length": 2, "type": "num", "divide": 1},
+        "vbat": {"value": 718, "length": 2, "type": "num", "divide": 10}
+      }
+    },
+    "fields": [
+      {"type": "text", "offset": 16, "length": 10, "value": "DLSPH0001"},
+      {"type": "text", "offset": 76, "length": 10, "value": "SPH000001"},
+      {"type": "num", "offset": 158, "length": 2, "value": 1},
+      {"type": "num", "offset": 162, "length": 4, "value": 18420},
+      {"type": "numx", "offset": 298, "length": 4, "value": 4210},
+      {"type": "num", "offset": 306, "length": 2, "value": 5000},
+      {"type": "num", "offset": 310, "length": 2, "value": 2408},
+      {"type": "num", "offset": 718, "length": 2, "value": 523},
+      {"type": "num", "offset": 722, "length": 2, "value": 64}
+    ],
+    "expected_values": {"pvserial": "SPH000001", "SOC": 64}
+  },
+  {
+    "name": "spa AC storage packet",
+    "family": "spa",
+    "header": "0000000600000104",
+    "ndata": 585,
+    "current_layout": "T06NNNNX",
+    "expected_layout": "T06NNNNXSPA",
+    "layouts": {
+      "T06NNNNX": {
+        "decrypt": {"value": "True"},
+        "datalogserial": {"value": 16, "length": 10, "type": "text", "incl": "yes"},
+        "pvserial": {"value": 76, "length": 10, "type": "text"},
+        "pvpowerout": {"value": 250, "length": 4, "type": "numx", "divide": 10},
+        "pvfrequentie": {"value": 258, "length": 2, "type": "num", "divide": 100}
+      },
+      "T06NNNNXSPA": {
+        "decrypt": {"value": "True"},
+        "datalogserial": {"value": 16, "length": 10, "type": "text", "incl": "yes"},
+        "pvserial": {"value": 76, "length": 10, "type": "text"},
+        "pvpowerout": {"value": 298, "length": 4, "type": "numx", "divide": 10},
+        "pvfrequentie": {"value": 306, "length": 2, "type": "num", "divide": 100},
+        "SOC": {"value": 722, "length": 2, "type": "num", "divide": 1},
+        "vbat": {"value": 718, "length": 2, "type": "num", "divide": 10}
+      }
+    },
+    "fields": [
+      {"type": "text", "offset": 16, "length": 10, "value": "DLSPA0001"},
+      {"type": "text", "offset": 76, "length": 10, "value": "SPA000001"},
+      {"type": "numx", "offset": 298, "length": 4, "value": -860},
+      {"type": "num", "offset": 306, "length": 2, "value": 5001},
+      {"type": "num", "offset": 718, "length": 2, "value": 511},
+      {"type": "num", "offset": 722, "length": 2, "value": 48}
+    ],
+    "expected_values": {"pvserial": "SPA000001", "SOC": 48}
+  },
+  {
+    "name": "tl3 three phase packet",
+    "family": "tl3",
+    "header": "0000000600000104",
+    "ndata": 585,
+    "current_layout": "T06NNNNX",
+    "expected_layout": "T06NNNNXTL3",
+    "layouts": {
+      "T06NNNNX": {
+        "decrypt": {"value": "True"},
+        "datalogserial": {"value": 16, "length": 10, "type": "text", "incl": "yes"},
+        "pvserial": {"value": 76, "length": 10, "type": "text"},
+        "pvpowerout": {"value": 250, "length": 4, "type": "numx", "divide": 10},
+        "pvfrequentie": {"value": 258, "length": 2, "type": "num", "divide": 100}
+      },
+      "T06NNNNXTL3": {
+        "decrypt": {"value": "True"},
+        "datalogserial": {"value": 16, "length": 10, "type": "text", "incl": "yes"},
+        "pvserial": {"value": 76, "length": 10, "type": "text"},
+        "pvpowerout": {"value": 298, "length": 4, "type": "numx", "divide": 10},
+        "pvfrequentie": {"value": 306, "length": 2, "type": "num", "divide": 100},
+        "pvgridvoltage": {"value": 310, "length": 2, "type": "num", "divide": 10},
+        "pvgridvoltage2": {"value": 314, "length": 2, "type": "num", "divide": 10},
+        "pvgridvoltage3": {"value": 318, "length": 2, "type": "num", "divide": 10}
+      }
+    },
+    "fields": [
+      {"type": "text", "offset": 16, "length": 10, "value": "DLTL30001"},
+      {"type": "text", "offset": 76, "length": 10, "value": "TL3000001"},
+      {"type": "numx", "offset": 298, "length": 4, "value": 12340},
+      {"type": "num", "offset": 306, "length": 2, "value": 4998},
+      {"type": "num", "offset": 310, "length": 2, "value": 2320},
+      {"type": "num", "offset": 314, "length": 2, "value": 2315},
+      {"type": "num", "offset": 318, "length": 2, "value": 2328}
+    ],
+    "expected_values": {"pvserial": "TL3000001", "pvgridvoltage2": 2315}
+  },
+  {
+    "name": "min string inverter packet",
+    "family": "min",
+    "header": "0000000600000104",
+    "ndata": 585,
+    "current_layout": "T06NNNNX",
+    "expected_layout": "T06NNNNXMIN",
+    "layouts": {
+      "T06NNNNX": {
+        "decrypt": {"value": "True"},
+        "datalogserial": {"value": 16, "length": 10, "type": "text", "incl": "yes"},
+        "pvserial": {"value": 76, "length": 10, "type": "text"},
+        "pvpowerout": {"value": 250, "length": 4, "type": "numx", "divide": 10},
+        "pvfrequentie": {"value": 258, "length": 2, "type": "num", "divide": 100}
+      },
+      "T06NNNNXMIN": {
+        "decrypt": {"value": "True"},
+        "datalogserial": {"value": 16, "length": 10, "type": "text", "incl": "yes"},
+        "pvserial": {"value": 76, "length": 10, "type": "text"},
+        "pv1voltage": {"value": 142, "length": 2, "type": "num", "divide": 10},
+        "pv2voltage": {"value": 150, "length": 2, "type": "num", "divide": 10},
+        "pvpowerout": {"value": 298, "length": 4, "type": "numx", "divide": 10},
+        "pvfrequentie": {"value": 306, "length": 2, "type": "num", "divide": 100},
+        "epvtotal": {"value": 354, "length": 4, "type": "num", "divide": 10}
+      }
+    },
+    "fields": [
+      {"type": "text", "offset": 16, "length": 10, "value": "DLMIN0001"},
+      {"type": "text", "offset": 76, "length": 10, "value": "MIN000001"},
+      {"type": "num", "offset": 142, "length": 2, "value": 3250},
+      {"type": "num", "offset": 150, "length": 2, "value": 3284},
+      {"type": "numx", "offset": 298, "length": 4, "value": 3670},
+      {"type": "num", "offset": 306, "length": 2, "value": 5000},
+      {"type": "num", "offset": 354, "length": 4, "value": 81234}
+    ],
+    "expected_values": {"pvserial": "MIN000001", "epvtotal": 81234}
+  }
+]

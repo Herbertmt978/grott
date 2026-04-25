@@ -1,0 +1,95 @@
+name: Publish GHCR Images
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag to publish, for example v0.1.1-beta"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  RUNTIME_IMAGE: ghcr.io/herbertmt978/grott
+  ADDON_IMAGE: ghcr.io/herbertmt978/grott-ha-docker
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Resolve release version
+        id: release
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+          version="${tag#v}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Runtime image metadata
+        id: runtime_meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.RUNTIME_IMAGE }}
+          tags: |
+            type=raw,value=${{ steps.release.outputs.tag }}
+            type=raw,value=${{ steps.release.outputs.version }}
+
+      - name: Build and publish runtime image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/dockerfile
+          platforms: linux/amd64,linux/arm64,linux/arm/v7,linux/386
+          push: true
+          tags: ${{ steps.runtime_meta.outputs.tags }}
+          labels: ${{ steps.runtime_meta.outputs.labels }}
+
+      - name: Home Assistant add-on image metadata
+        id: addon_meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.ADDON_IMAGE }}
+          tags: |
+            type=raw,value=${{ steps.release.outputs.version }}
+            type=raw,value=${{ steps.release.outputs.tag }}
+
+      - name: Build and publish Home Assistant add-on image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./addons/grott
+          platforms: linux/amd64,linux/arm64,linux/arm/v7,linux/386
+          push: true
+          build-args: |
+            BUILD_VERSION=${{ steps.release.outputs.version }}
+            GROTT_REF=${{ steps.release.outputs.tag }}
+          tags: ${{ steps.addon_meta.outputs.tags }}
+          labels: ${{ steps.addon_meta.outputs.labels }}

@@ -1,0 +1,47 @@
+name: Grott HA Docker
+version: 0.1.0-beta
+slug: grott_ha_docker
+description: Growatt proxy telemetry parser with guarded layout selection and Home Assistant MQTT discovery
+url: https://github.com/Herbertmt978/grott
+stage: experimental
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+startup: services
+boot: auto
+init: false
+ports:
+  5279/tcp: 5279
+map:
+  - share:rw
+services:
+  - mqtt:need
+options:
+  mode: proxy
+  blockcmd: true
+  time: server
+  sendbuf: false
+  invtype: default
+  layout_strict: false
+  layout_auto_family: true
+  ha_plugin: true
+  mqtt_host: core-mosquitto
+  mqtt_port: 1883
+  mqtt_user: ""
+  mqtt_password: ""
+schema:
+  mode: list(proxy|server|sniff)
+  blockcmd: bool
+  time: list(auto|server)
+  sendbuf: bool
+  invtype: str
+  layout_strict: bool
+  layout_auto_family: bool
+  ha_plugin: bool
+  mqtt_host: str
+  mqtt_port: port
+  mqtt_user: str
+  mqtt_password: password

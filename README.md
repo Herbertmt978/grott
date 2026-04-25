@@ -4,6 +4,25 @@
 #### Before using grott please read disclaimer: https://github.com/johanmeijer/grott/wiki/@disclaimer,-statement-of-use-and-limitations
 ### From 17-05-2024 this version (2.8.3) is the new master 
 
+### Grott HA Docker Fork Beta
+
+This fork preserves upstream Grott history and adds guarded layout selection for Docker and Home Assistant add-on users.
+
+Recommended proxy defaults for Growatt/ShineWiFi telemetry:
+
+```ini
+[Generic]
+mode = proxy
+blockcmd = True
+time = server
+sendbuf = False
+invtype = default
+layout_strict = False
+layout_auto_family = True
+```
+
+Use `layout_strict=True` only when you need legacy forced `invtype` behavior. The guarded selector can prefer a configured family such as `sph`, but it falls back to the safer generic layout when the family layout produces implausible values.
+
 Growatt inverters can send performance and status metrics (log data) to the Growatt company servers. The inverters rely on either a ShineWIFI module or a ShineLAN box to relay the data to Growatt. The metrics stored on the Growatt servers then can be viewed on the Growatt website or using the ShinePhone mobile app. 
 
 The purpose of Grott is to read, parse and forward the *raw metrics as they are sent* to Growatt servers. This means other applications can consume the raw Growatt metrics without relying on the Growatt API and servers and without delay. 

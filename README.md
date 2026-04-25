@@ -8,6 +8,20 @@
 
 This fork preserves upstream Grott history and adds guarded layout selection for Docker and Home Assistant add-on users.
 
+Home Assistant add-on install:
+
+1. In Home Assistant, open Settings -> Add-ons -> Add-on Store.
+2. Open the store menu, choose Repositories, and add:
+
+```text
+https://github.com/Herbertmt978/grott
+```
+
+3. Install **Grott HA Docker**.
+4. Point each Growatt/ShineWiFi datalogger at your Home Assistant host on port `5279`.
+
+The current beta release is [`v0.1.0-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.0-beta).
+
 Recommended proxy defaults for Growatt/ShineWiFi telemetry:
 
 ```ini

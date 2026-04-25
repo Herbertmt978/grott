@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5-beta
+
+- Redact extension variables, PVOutput API keys, and other secret-shaped values from verbose logs.
+- Keep the README pointed at the latest beta images after the logging hardening.
+
 ## 0.1.4-beta
 
 - Fix the Docker runtime image so the installed `grottext.ha` package is not shadowed by the old sample `grottext.py` extension.

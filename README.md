@@ -10,7 +10,7 @@ This fork keeps the upstream history intact. It exists because the problem in up
 
 ## Current Status
 
-The current beta release is [`v0.1.4-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.4-beta).
+The current beta release is [`v0.1.5-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.5-beta).
 
 This is beta software. It has been tested with a real ShineWiFi/SPH Home Assistant setup and with sanitized layout fixtures for generic, SPH, SPA, TL3, and MIN-style packets. Growatt has many inverter and datalogger combinations, so please treat new hardware combinations as testing until the values have been compared with ShinePhone.
 
@@ -112,7 +112,7 @@ Create `docker-compose.yml`:
 ```yaml
 services:
   grott:
-    image: ghcr.io/herbertmt978/grott:0.1.4-beta
+    image: ghcr.io/herbertmt978/grott:0.1.5-beta
     container_name: grott
     restart: unless-stopped
     ports:
@@ -234,7 +234,7 @@ Back up your existing `grott.ini` or Home Assistant add-on options first.
 For Docker, change only the image first:
 
 ```yaml
-image: ghcr.io/herbertmt978/grott:0.1.4-beta
+image: ghcr.io/herbertmt978/grott:0.1.5-beta
 ```
 
 Then make sure your config includes the proxy settings:

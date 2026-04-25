@@ -3,6 +3,7 @@ version: 0.1.0-beta
 slug: grott_ha_docker
 description: Growatt proxy telemetry parser with guarded layout selection and Home Assistant MQTT discovery
 url: https://github.com/Herbertmt978/grott
+stage: experimental
 arch:
   - aarch64
   - amd64

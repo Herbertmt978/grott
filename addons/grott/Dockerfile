@@ -1,8 +1,15 @@
 ARG BUILD_FROM=python:3.11-slim
 FROM ${BUILD_FROM}
 
+ARG BUILD_VERSION
+ARG BUILD_ARCH
 ARG GROTT_REPO=https://github.com/Herbertmt978/grott.git
-ARG GROTT_REF=Herb/auto-layout-ha-docker
+ARG GROTT_REF=v0.1.0-beta
+
+LABEL \
+    io.hass.version="${BUILD_VERSION}" \
+    io.hass.type="addon" \
+    io.hass.arch="${BUILD_ARCH}"
 
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app

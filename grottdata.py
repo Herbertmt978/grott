@@ -73,6 +73,11 @@ class GrottPvOutLimit:
 pvout_limit = GrottPvOutLimit()
 
 
+def layout_selection_is_usable(conf, selection, is_smart_meter):
+    min_score = int(getattr(conf, "layout_min_score", 20))
+    return is_smart_meter or min_score <= 0 or selection.score >= min_score
+
+
 # Formats multi-line data
 def format_multi_line(prefix, string, size=80):
     size -= len(prefix)
@@ -184,6 +189,14 @@ def procdata(conf,data):
             for rejected_layout, reasons in selection.rejected.items():
                 if rejected_layout != selection.layout:
                     print("\t\t - rejected", rejected_layout, ":", "; ".join(reasons))
+        if not layout_selection_is_usable(conf, selection, is_smart_meter):
+            if conf.verbose:
+                print(
+                    "\t - Layout score below minimum",
+                    getattr(conf, "layout_min_score", 20),
+                    "- record not processed",
+                )
+            return
         layout = selection.layout
         conf.layout = layout
 

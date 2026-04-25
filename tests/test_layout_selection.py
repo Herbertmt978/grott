@@ -3,10 +3,12 @@ from types import SimpleNamespace
 from grottlayout import (
     build_candidate_layouts,
     generic_layout_name,
+    LayoutSelection,
     normalize_key,
     parse_layout_values,
     select_layout,
 )
+from grottdata import layout_selection_is_usable
 
 
 def make_conf(invtype="default", strict=False):
@@ -189,3 +191,17 @@ def test_normalize_key_removes_illegal_topic_characters():
     assert normalize_key("pactogrids ") == "pactogrids"
     assert normalize_key("pactogrid t") == "pactogrid_t"
     assert normalize_key("#battemp") == "battemp"
+
+
+def test_low_score_inverter_layout_selection_is_not_usable():
+    conf = make_conf()
+    selection = LayoutSelection("T06NNNNX", 11)
+
+    assert layout_selection_is_usable(conf, selection, is_smart_meter=False) is False
+
+
+def test_low_score_smart_meter_layout_selection_remains_usable():
+    conf = make_conf()
+    selection = LayoutSelection("T05201b", 11)
+
+    assert layout_selection_is_usable(conf, selection, is_smart_meter=True) is True

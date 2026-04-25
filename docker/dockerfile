@@ -16,7 +16,6 @@ RUN apt-get update \
 COPY grott.py grottconf.py grottdata.py grottlayout.py grottproxy.py grottsniffer.py grottserver.py /app/
 COPY examples/grott.ini /app/grott.ini
 COPY ["examples/Home Assistent/grott_ha.py", "/app/grott_ha.py"]
-COPY examples/Extensions/grottext.py /app/grottext.py
 
 EXPOSE 5279
 CMD ["python", "-u", "grott.py", "-v"]

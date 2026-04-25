@@ -32,18 +32,18 @@ https://github.com/Herbertmt978/grott
 3. Install **Grott HA Docker**.
 4. Point each Growatt/ShineWiFi datalogger at your Home Assistant host on port `5279`.
 
-The current beta release is [`v0.1.3-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.3-beta). The add-on uses the prebuilt GHCR image `ghcr.io/herbertmt978/grott-ha-docker`, so Home Assistant should not need to build it locally. Current prebuilt images cover `aarch64`, `amd64`, `armv7`, and `i386`; `armhf` is not advertised until we have a reliable ARMv6 image path.
+The current beta release is [`v0.1.4-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.4-beta). The add-on uses the prebuilt GHCR image `ghcr.io/herbertmt978/grott-ha-docker`, so Home Assistant should not need to build it locally. Current prebuilt images cover `aarch64`, `amd64`, `armv7`, and `i386`; `armhf` is not advertised until we have a reliable ARMv6 image path.
 
 This is still a beta. It has been tested against a real ShineWiFi/SPH Home Assistant setup and sanitized packet fixtures for the common layouts already in this fork, but Growatt has a lot of inverter and datalogger combinations. If your setup creates empty, wrong, or missing sensors, please open a layout request and include sanitized verbose Grott packet output plus the values shown in ShinePhone at the same time.
 
-`v0.1.1-beta` was removed because its first multi-architecture image publish failed before a usable release existed. Use `v0.1.3-beta` or newer.
+`v0.1.1-beta` was removed because its first multi-architecture image publish failed before a usable release existed. Use `v0.1.4-beta` or newer.
 
 Docker users can run the matching runtime image:
 
 ```yaml
 services:
   grott:
-    image: ghcr.io/herbertmt978/grott:0.1.3-beta
+    image: ghcr.io/herbertmt978/grott:0.1.4-beta
     container_name: grott
     restart: unless-stopped
     ports:

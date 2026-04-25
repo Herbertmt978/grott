@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4-beta
+
+- Fix the Docker runtime image so the installed `grottext.ha` package is not shadowed by the old sample `grottext.py` extension.
+
 ## 0.1.3-beta
 
 - Use `grott-ha-plugin` for Home Assistant MQTT discovery so Docker and add-on installs share the same entity naming as working HA deployments.

@@ -1,44 +1,113 @@
+# Grott HA Docker
 
-## The Growatt Inverter Monitor 
 [![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/donate?business=RQFS46F9JTESQ&item_name=Grott+&currency_code=EUR)
-#### Before using grott please read disclaimer: https://github.com/johanmeijer/grott/wiki/@disclaimer,-statement-of-use-and-limitations
-### From 17-05-2024 this version (2.8.3) is the new master 
 
-### Grott HA Docker Fork Beta
+Grott HA Docker is a maintained beta fork of [`johanmeijer/grott`](https://github.com/johanmeijer/grott) for people who want Growatt/ShineWiFi data in Home Assistant without relying on the Growatt cloud API.
 
-This is a true fork of [`johanmeijer/grott`](https://github.com/johanmeijer/grott), with the upstream history kept intact. I forked it because the problem in upstream issue [#697](https://github.com/johanmeijer/grott/issues/697) matched what I was seeing in a real Home Assistant setup: ShineWiFi/Growatt dataloggers stayed online, but Grott stopped turning their packets into useful live telemetry around the same daytime window. The upstream project still exists, but this fork is meant to provide a maintained, installable Home Assistant and Docker build for people who need this fixed now.
+Grott sits between your Growatt datalogger and the Growatt servers. Your datalogger sends the normal inverter packets to Grott, Grott reads them, forwards them on to Growatt, and publishes Home Assistant-friendly MQTT discovery and sensor state.
 
-What this fork changes since the fork point:
+This fork keeps the upstream history intact. It exists because the problem in upstream issue [#697](https://github.com/johanmeijer/grott/issues/697) matched a real Home Assistant setup: the dataloggers were still online, but live telemetry stopped being useful in Home Assistant. This fork packages the working fix as Docker and Home Assistant add-on builds.
 
-- Adds guarded layout selection so Grott can try the configured inverter family, reject implausible parses, and fall back to safer generic layouts instead of publishing empty or nonsense sensors.
-- Carries the practical fix for affected ShineWiFi/Growatt telemetry: proxy mode, `blockcmd=True`, `time=server`, and `sendbuf=False` are the recommended defaults.
-- Packages Grott as a Home Assistant add-on repository with MQTT discovery enabled by default.
-- Uses the maintained [`grott-ha-plugin`](https://github.com/egguy/grott-ha-plugin) for Home Assistant MQTT discovery so entity naming matches the working HA setups this fork was tested against.
-- Publishes prebuilt GHCR images for Docker and Home Assistant so HA boxes do not have to build Grott locally.
-- Cleans up Home Assistant MQTT discovery keys so invalid names do not create broken entities.
-- Adds a dry-run first helper for clearing stale retained Grott discovery topics during migration.
-- Adds tests and sanitized packet/layout fixtures for generic, SPH, SPA, TL3, and MIN style layouts.
-- Documents the upstream license gap instead of pretending it is settled.
+## Current Status
 
-Home Assistant add-on install:
+The current beta release is [`v0.1.4-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.4-beta).
 
-1. In Home Assistant, open Settings -> Add-ons -> Add-on Store.
-2. Open the store menu, choose Repositories, and add:
+This is beta software. It has been tested with a real ShineWiFi/SPH Home Assistant setup and with sanitized layout fixtures for generic, SPH, SPA, TL3, and MIN-style packets. Growatt has many inverter and datalogger combinations, so please treat new hardware combinations as testing until the values have been compared with ShinePhone.
+
+Prebuilt images are published to GHCR for:
+
+- `amd64`
+- `aarch64`
+- `armv7`
+- `i386`
+
+The upstream project does not currently have a repository-level license. This fork preserves attribution and does not add a license to inherited upstream code. See [docs/LEGAL.md](docs/LEGAL.md) and the upstream license discussion in [johanmeijer/grott#512](https://github.com/johanmeijer/grott/issues/512).
+
+## What Changed In This Fork
+
+- Home Assistant add-on packaging with prebuilt GHCR images.
+- Docker images that include the Home Assistant discovery plugin.
+- Guarded layout selection, so a bad family layout can be rejected instead of publishing nonsense sensors.
+- Recommended proxy settings for the ShineWiFi/SPH issue: `blockcmd=True`, `time=server`, and `sendbuf=False`.
+- Home Assistant MQTT discovery using [`grott-ha-plugin`](https://github.com/egguy/grott-ha-plugin).
+- Cleaner entity names and unique IDs for Home Assistant.
+- A dry-run-first helper for clearing stale retained MQTT discovery topics.
+- Tests and sanitized packet fixtures for the layouts this fork currently knows about.
+
+## How It Works
+
+The recommended setup is proxy mode:
 
 ```text
-https://github.com/Herbertmt978/grott
+Growatt datalogger -> Grott -> Growatt servers
+                         |
+                         +-> MQTT -> Home Assistant
 ```
 
+In proxy mode, your ShinePhone app can continue to work because Grott forwards the packets to Growatt after reading them. Grott listens on TCP port `5279` by default.
+
+Sniff mode still exists upstream, but it is harder to run safely because it needs packet routing and elevated network permissions. For Home Assistant and Docker installs, use proxy mode unless you already know you need sniffing.
+
+## Before You Start
+
+You need three things:
+
+1. A Home Assistant host, Docker host, or VM that your Growatt datalogger can reach on your local network.
+2. A stable IP address for that host. A DHCP reservation on your router is usually enough.
+3. MQTT set up in Home Assistant.
+
+Home Assistant will not show the sensors unless the [MQTT integration](https://www.home-assistant.io/integrations/mqtt/) is installed and connected to a broker. If you use Home Assistant OS, the easiest path is usually the official Mosquitto broker add-on plus the MQTT integration.
+
+MQTT discovery should stay enabled. Home Assistant enables MQTT discovery by default, and this fork uses it to create the Grott devices and sensors automatically.
+
+## Install As A Home Assistant Add-On
+
+This is the easiest install if Grott will run on the same Home Assistant machine.
+
+1. In Home Assistant, open **Settings -> Add-ons -> Add-on Store**.
+2. Open the store menu, choose **Repositories**, and add:
+
+   ```text
+   https://github.com/Herbertmt978/grott
+   ```
+
 3. Install **Grott HA Docker**.
-4. Point each Growatt/ShineWiFi datalogger at your Home Assistant host on port `5279`.
+4. Check the add-on configuration.
 
-The current beta release is [`v0.1.4-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.4-beta). The add-on uses the prebuilt GHCR image `ghcr.io/herbertmt978/grott-ha-docker`, so Home Assistant should not need to build it locally. Current prebuilt images cover `aarch64`, `amd64`, `armv7`, and `i386`; `armhf` is not advertised until we have a reliable ARMv6 image path.
+   The defaults are intended to be conservative:
 
-This is still a beta. It has been tested against a real ShineWiFi/SPH Home Assistant setup and sanitized packet fixtures for the common layouts already in this fork, but Growatt has a lot of inverter and datalogger combinations. If your setup creates empty, wrong, or missing sensors, please open a layout request and include sanitized verbose Grott packet output plus the values shown in ShinePhone at the same time.
+   ```yaml
+   mode: proxy
+   blockcmd: true
+   time: server
+   sendbuf: false
+   invtype: default
+   layout_strict: false
+   layout_auto_family: true
+   ha_plugin: true
+   mqtt_host: core-mosquitto
+   mqtt_port: 1883
+   mqtt_retain: false
+   ```
 
-`v0.1.1-beta` was removed because its first multi-architecture image publish failed before a usable release existed. Use `v0.1.4-beta` or newer.
+5. If your MQTT broker requires authentication, set `mqtt_user` and `mqtt_password`.
+6. Start the add-on.
+7. Point your Growatt datalogger at your Home Assistant IP address on port `5279`.
+8. Wait for the next datalogger packet. Many dataloggers report roughly once per minute, but some are slower.
 
-Docker users can run the matching runtime image:
+For SPH or ShineWiFi setups affected by [#697](https://github.com/johanmeijer/grott/issues/697), set:
+
+```yaml
+invtype: sph
+```
+
+Leave `layout_strict` as `false` unless you intentionally want old Grott behaviour where the configured inverter family is forced even when the parsed values look wrong.
+
+## Install With Docker Compose
+
+Use this if Grott will run on a separate Linux server, NAS, or VM.
+
+Create `docker-compose.yml`:
 
 ```yaml
 services:
@@ -49,12 +118,13 @@ services:
     ports:
       - "5279:5279"
     volumes:
-      - ./grott.ini:/app/grott.ini
+      - ./grott.ini:/app/grott.ini:ro
+      - ./grott.ini:/app/config/grott.ini:ro
     environment:
-      - TZ=Europe/London
+      TZ: Europe/London
 ```
 
-Recommended proxy defaults for Growatt/ShineWiFi telemetry:
+Create `grott.ini`:
 
 ```ini
 [Generic]
@@ -75,218 +145,190 @@ extname = grottext.ha
 extvar = {"ha_mqtt_host": "MQTT_HOST", "ha_mqtt_port": 1883, "ha_mqtt_user": "MQTT_USER", "ha_mqtt_password": "MQTT_PASSWORD", "ha_mqtt_retain": False}
 ```
 
-Use `layout_strict=True` only when you need legacy forced `invtype` behavior. The guarded selector can prefer a configured family such as `sph`, but it falls back to the safer generic layout when the family layout produces implausible values.
+Replace `MQTT_HOST`, `MQTT_USER`, and `MQTT_PASSWORD` with your broker details. If your broker does not require authentication, omit the user and password values from `extvar`.
 
-First run checklist:
+For SPH or ShineWiFi setups affected by [#697](https://github.com/johanmeijer/grott/issues/697), use:
 
-1. Confirm your MQTT broker is reachable from Grott.
-2. Point each datalogger at the Grott host on TCP port `5279`.
-3. Start Grott and wait for a fresh packet from the datalogger.
-4. Check the Grott log for a parsed record and an MQTT publish.
-5. In Home Assistant, check the MQTT integration for a Grott device and sensors.
+```ini
+invtype = sph
+```
 
-Rollback is straightforward. For Docker, change the image back to your previous tag, for example `ledidobe/grott:2.8.3_240731`, and restart the container. For the Home Assistant add-on, restore your previous add-on options or reinstall the previous add-on repository you were using. Dataloggers can keep pointing at the same Grott host and port as long as the replacement Grott service listens on `5279`.
+Start Grott:
 
-If you are migrating from a Grott install that created bad retained Home Assistant discovery entities, dry-run the cleanup helper before deleting anything:
+```sh
+docker compose up -d
+docker logs -f grott
+```
+
+`nomqtt = True` only disables Grott's older native MQTT JSON output. Home Assistant discovery and state publishing are handled by the `grottext.ha` extension in this image.
+
+## Configure The Growatt Datalogger
+
+Your datalogger must be told to send data to Grott instead of sending directly to Growatt. In proxy mode, Grott forwards the packet to Growatt after reading it, so ShinePhone should continue to receive data.
+
+The exact screens vary between ShineLan, ShineWiFi-X, ShineWiFi-S, firmware versions, and phone apps. The clearest illustrated guide I found is the datalogger setup guide from [`muppet3000/homeassistant-grott`](https://github.com/muppet3000/homeassistant-grott/blob/main/docs/setup/datalogger.md). The short version is below.
+
+### ShineLan
+
+1. Find the datalogger IP address from your router or DHCP server.
+2. Open that IP address in a browser.
+3. Sign in. Common defaults are `admin` / `admin`, or `admin` with the CC code printed on the device.
+4. Open the network settings page.
+5. Turn domain resolution off if the page offers a setting such as `ResolvDomain`.
+6. Set the server IP to the IP address of the machine running Grott.
+7. Keep or set the server port to `5279` if there is a port field.
+8. Optionally lower the data transfer interval. One minute is a common minimum.
+9. Save and wait for the next packet.
+
+### ShineWiFi-X / ShineWiFi-S
+
+1. Open the ShinePhone app.
+2. Go to **Me -> Datalogger Configuration**.
+3. Add or select the datalogger by scanning its QR code or entering the serial and verification code.
+4. Choose hotspot mode.
+5. Press the datalogger button to enter hotspot mode. The blue LED should stay on.
+6. Connect your phone to the Wi-Fi network broadcast by the datalogger.
+7. Return to ShinePhone and open the advanced settings.
+8. Open server settings.
+9. Unlock the server settings. Many ShineWiFi devices use a password in the format `growattYYYYMMDD`, using today's date.
+10. Turn off domain-name mode.
+11. Set the server IP to the IP address of the machine running Grott.
+12. Keep or set the server port to `5279` if there is a port field.
+13. Save, then choose the option to configure immediately.
+14. Wait a minute or two for the datalogger to reconnect and send a packet.
+
+If you later remove Grott, put the datalogger server setting back to Growatt's server or to the service you were using before.
+
+## Check That It Is Working
+
+After the datalogger is pointed at Grott, check the Grott log first.
+
+You want to see:
+
+- a Growatt packet received
+- a layout selected
+- decoded values such as `pvserial`, `pvpowerin`, `pvpowerout`, or `epvtotal`
+- Home Assistant discovery/state publishing through `grottext.ha`
+
+Then check Home Assistant:
+
+1. Open **Settings -> Devices & services**.
+2. Make sure the [MQTT integration](https://www.home-assistant.io/integrations/mqtt/) is present and connected.
+3. Open the MQTT integration and look for Grott devices.
+4. Search entities for your inverter or datalogger serial.
+
+Useful first sensors to check are:
+
+- `Grott last data push`
+- `PV Input (Actual)`
+- `PV Output (Actual)`
+- `Lifetime solar energy`
+- `Inverter temperature`
+
+Compare a few values with ShinePhone. They will not always update at the exact same second, but the numbers should be believable and in the same ballpark.
+
+## Migrating From Another Grott Install
+
+Back up your existing `grott.ini` or Home Assistant add-on options first.
+
+For Docker, change only the image first:
+
+```yaml
+image: ghcr.io/herbertmt978/grott:0.1.4-beta
+```
+
+Then make sure your config includes the proxy settings:
+
+```ini
+mode = proxy
+blockcmd = True
+time = server
+sendbuf = False
+```
+
+For Home Assistant add-on users, install this repository, copy your MQTT settings into the add-on options, and start the add-on.
+
+If a previous install created broken or stale MQTT discovery entities, dry-run the cleanup helper before deleting anything:
 
 ```sh
 python tools/ha_discovery_cleanup.py --host MQTT_HOST --device DATALOGGER_SERIAL --all
 ```
 
-Re-run with `--execute` only after checking the topic list. Licensing is not fully settled upstream yet; see [`docs/LEGAL.md`](docs/LEGAL.md) before promoting this fork widely.
+Only run the destructive version after reading the topic list:
 
-Growatt inverters can send performance and status metrics (log data) to the Growatt company servers. The inverters rely on either a ShineWIFI module or a ShineLAN box to relay the data to Growatt. The metrics stored on the Growatt servers then can be viewed on the Growatt website or using the ShinePhone mobile app. 
+```sh
+python tools/ha_discovery_cleanup.py --host MQTT_HOST --device DATALOGGER_SERIAL --all --execute
+```
 
-The purpose of Grott is to read, parse and forward the *raw metrics as they are sent* to Growatt servers. This means other applications can consume the raw Growatt metrics without relying on the Growatt API and servers and without delay. 
+The helper only targets Grott discovery topics under:
 
-Grottserver (under development) is emulating the Growatt server so you do not need a connection with the growatt servers anymore. Grottserver provides also an API interface to read and write Inverter and Datalogger registers.
-For more information see: https://github.com/johanmeijer/grott/wiki/Grottserver. 
+```text
+homeassistant/sensor/grott/
+```
 
-### Before using Grott please see: https://github.com/johanmeijer/grott/wiki/@Statement-of-use-and-limitations 
-### First time users please start with: https://github.com/johanmeijer/grott/wiki/@-First-time-installation
+## Troubleshooting
 
-### New in Version 2.8
-* Added first SPA support (2.8.1)
-* Added first MIN support (2.8.2)
-* For all changes see Version_history file (https://github.com/johanmeijer/grott/blob/2.8.3/Version_history.txt)
+If Home Assistant shows no Grott sensors:
 
-### New in Version 2.7  
-* Added first beta of **grottserver** to act as destination for inverter/datalogger data (remove need to cummunicate with internet).
-  - grottserver is able to sent read/write register commands to inverter and datalogger.
-  - see https://github.com/johanmeijer/grott/wiki/Grottserver and discussions https://github.com/johanmeijer/grott/discussions/98 for more information: 
-* Support for SDM630/Raillog connected (see issue #88)
-* Support for SDM630/Inverter (modbus) connected 3 phases support
-* Export to CSV file (see issue #79, pull request #91). 
-  - Also avaialble in 2.6.1 (master) 
-  - More information can be found in the wiki: https://github.com/johanmeijer/grott/wiki/Extensions
-* Add parameter to enable message retain in MQTT (#84)
-  - .ini [MQTT section] retain = True
-  - environmental gmqttretain = "True" (docker: -e gmqttretain = "True") 
-* Add parameter to enable sent inverter temperature as temperature value to pvoutput (not advised PVOutemp should be outside temperature) Issue #60
-  - .ini [PVOutput section] pvtemp = True
-  - environmental gpvtemp = "True" (docker: -e gpvtemp = "True")
-* Add parameter to disable sending energytoday to pvoutput (disable V1 input). This should show better avarages. Issue: #52  
-  - .ini [PVOutput section] pvdisv1 = True
-  - environmental gpvdisv1 = "True" (docker: -e gpvdisv1 = "True")  
-* Add support for  SPH5000 T05nnnnXSPH data record
-* Add record validation to eliminate incomplete/corrupted records (for both Grott and Grottserver), see also issue #135
-  - To enable CRC checking for Grott an additional python library is needed (sudo pip3 install libscrc)
-  - Without libscrc only validation on length will be performed.
-  - No CRC checking is being done for older converter types (length validation is always performed).
-* Added option to add inverter serial to MQTT topic (thanks to @ebosveld)
-  - Add mqttinverterintopic = True to MQTT section of grott.ini or use  qmqttinverterintopic = "True" environmental (e.g. docker).
+- Confirm the MQTT integration is installed and connected.
+- Confirm MQTT discovery is enabled.
+- Confirm Grott can reach the MQTT broker.
+- Check the Grott log for `grottext.ha`.
+- Wait for a fresh datalogger packet; discovery is usually published when Grott sees live data.
 
-### planned in Version 2.7.x (not commited yet)
-* Auto detect for SPF, SPH, TL3 inverters
-* Improved / configurable PVOutput support 
-* MQTT Retain message support      
-* Enhanced record layout for SPH 
-* tbd
+If Grott receives no packets:
 
-### Two modes of metric data retrieval
-Grott can intercept the inverter metrics in two distinct modes:
-* Proxy mode (man in the middle): The Growatt ShineWifi or ShineLAN box can be easily configured to use Grott as an alternative server to the default server.growatt.com. Grott then acts as a relay to the Growatt servers. Grott reads the transmitted data, and then forwards the data to server.grott.com.
-* Sniff mode (original connection): Can be used if your router is linux based. IPTables NAT masquerading is used in conjuction with a python packet sniffer to read the data. (This is more resource intensive on the linux host).
+- Confirm the datalogger server IP is the Grott host IP.
+- Confirm the datalogger is using port `5279`.
+- Confirm the Grott host firewall allows inbound TCP `5279`.
+- Confirm the datalogger and Grott host are on networks that can reach each other.
 
+If sensors are created but values are wrong:
 
-### Where Grott can forward metric data to
-Grott can forward the parsed metrics to: 
-* MQTT (suggested option for many home automation systems such as Home Assistant, OpenHAB and Domoticz)
-* InfluxDB v1 and v2 (a time series database with dashboarding functionality) 
-* PVOutput.org (a service for sharing and comparing PV output data)
-* Custom output using the extension functionality (Examples available for Export to CSV files and writing to a Http Server).
+- Compare the values with ShinePhone at the same time.
+- Try setting `invtype` to your inverter family, such as `sph`, `spf`, `tl3`, `spa`, or `min`.
+- Keep `layout_strict = False` while testing.
+- Open a layout request and include sanitized verbose Grott output plus the matching ShinePhone values.
 
+If ShinePhone stops updating:
 
-### Compatibility
-The program is written in python and runs under Linux, Windows.
-It can run:
-* Interactive from the command line interface
-* As a Linux or Windows service
-* As a [Docker container](https://github.com/johanmeijer/grott/wiki/Docker-support).  
+- Make sure Grott is running in `proxy` mode.
+- Check that Grott can reach the Growatt server from its network.
+- Check the Grott log for connection errors after packet parsing.
 
-And is tested, but not limited to, inverter models:
-+ 1500-S (ShineWiFi)
-+ 3000-S  (Shinelan)
-+ 2500-MTL-S (ShineWiFi)
-+ 4200-MTL-S (Shinelan)
-+ 5000TL-X   (ShineWifi-X)
-+ 3600TL-XE (ShineLink-X)
-+ 3600TL-XE (ShineLan)
-+ MOD 5000TL3-X* (ShineLan)
-+ MOD 9000TL3-X*
+## Rollback
 
-**Experimental in latest 2.6 branch*
+For Docker, change the image back to your previous tag, for example:
 
-The Docker images are tested RPI(arm32), Ubuntu and Synology NAS
+```yaml
+image: ledidobe/grott:2.8.3_240731
+```
 
-## Grott installation
+Then restart:
 
-### ShineLAN or ShineWIFI configuration
-If Grott is running in proxy mode the ShineLAN box or ShineWIFI module [needs to be configured](https://github.com/johanmeijer/grott/wiki/Rerouting-Growatt-Wifi-TCPIP-data-via-your-Grott-Server) to send data to Grott instead of the Growatt server API.
-Please see the [Wiki](https://github.com/johanmeijer/grott/wiki) for further information and installation details. 
+```sh
+docker compose up -d
+```
 
-## What's new
-### New in Version 2.6.1  (Master)
-#### TL3-X 3 phase inverter support 
-see issue #81/#82/#85: add invtype=tl3 in grott.ini [Generic] section (or use ginvtype="tl3" environmental variable e.g. for docker ledidome/grott:2.6.1f)
-#### SPF off grid inverter support 
-see issue #42/#46: add invtype=spf in grott.ini [Generic] section (or use ginvtype=spf environmental variable e.g. for docker)
-#### SPH hybrid (grid/battery) support 
-see issue #34: add invtype=sph in grott.ini [Generic] section (or use ginvtype=sph environmental variable e.g. for docker)
-#### Growatt Smart Meter support
-see issue #47: data will be processed automatically and send to MQTT, InfluxDB and PVOutput.org
-#### Export to CSV file
-see issue #79, pull request #91. More information can be found in the wiki: https://github.com/johanmeijer/grott/wiki/Extensions
+For Home Assistant, stop this add-on and reinstall the add-on repository you used before.
 
-### New in Version 2.5.x  
-Improved dynamic data processing  and dynamic generation of output allowing: 
-* add new output (values) without changing code (using external layout definitions)
-* rename keywords in MQTT JSON message and influxDB to own naming convention 
-* format the verbose output values
-* Allow negative values for pvpowerout. New (always on) inverters can also use power. 
-* Bugfix inluxdb port error
+The datalogger can stay pointed at the same host and port if the replacement Grott service is listening on TCP `5279`. Otherwise, change the datalogger server setting back to your previous target.
 
-see: https://github.com/johanmeijer/grott/wiki/Grott-advanced-(customize-behaviour)   
-<br> 
-Added new outout values to mqtt and influxDB to support 3 phase grid connection (actual information on voltage, current and power delivered), total active worktime (in 0.5 S) and energy generation per PV string (day and total)
-<br>
-     
-Improve environmental processing for mqtt/influxDB/growatt ip and port definitions
+## Reporting A Problem
 
-### New in Version 2.4.0  
-Introduce possibility to add extensions for additional (personalized) processing. 
-,br.     
-see: https://github.com/johanmeijer/grott/wiki/Extensions
+Please include:
 
-### New in Version 2.3.1  
-Direct output to inlfuxdb (v1 and v2)   
-<br> 
-see: https://github.com/johanmeijer/grott/wiki/InfluxDB-Support
-### New in Version 2.2.6  
-Mulitiple inverter (multiple system id's) support in PVOutput.org 
-<br> 
-see: https://github.com/johanmeijer/grott/wiki/PVOutput.org-support 
+- inverter model
+- datalogger model
+- whether you use Home Assistant add-on or Docker
+- your `invtype`, `layout_strict`, and `layout_auto_family` settings
+- sanitized verbose Grott packet output
+- the ShinePhone values shown at roughly the same time
 
-#### Be aware: Wiith this release the default grott.ini moved to examples directory 
-This file is deleted from the grott default directory to simply github installation (not overwrite your settings). 
-It is advised to copy this file into the Grott default directory (and customise it) during first time installation 
+Do not post MQTT passwords, Growatt account credentials, API keys, or full unsanitized network captures.
 
-### New in Version 2.2.1  
-#### Automatic protocol detection and processing
-Limited .ini configuration needed (inverterid, encryption, offset and record layout is automaticially detected)
-#### Direct output to PVOutput.org (no mqtt processing needed). 
-Specify pvoutput = True and apikey and systemid in .ini file to enable it. 
-#### Docker support 
-2 docker containers are created ledidobe/grottrpi (specific old RPI with ARM32) and ledidobe/grott (generic one, tested on synology NAS and Ubuntu). See https://hub.docker.com/search?q=ledidobe&type=image. 
-See issue 4 and 15 on how to use it (wiki will be updated soon)
-#### Command Blocking / Filtering
-with blockcmd = True specified in .ini (configure/reboot) commands from outside to the inverter are blocked. This protects the inverter from beeing controlled from the outside while data exchange with server.growatt.com for reporting is still active.  
-#### Use date/time from data record
-If date/time is available in the data (inserted by the inverter) this will be used. In this way buffered records will be sent with the original  creation time (in the past). 
-If date/time is not available in the data record the server time will be used (as it was originally). 
-In the mqtt message the  key buffered is added (yes/no) which indicates that the message is from the buffer (past) or actual. 
+## Upstream Grott
 
-### Version 2: Introduction of 2 modes support: sniff and proxy. 
-In sniff mode (default and compatable with older Grott versions) IP sniffering technology is used (based on: https://github.com/buckyroberts/Python-Packet-Sniffer). In this mode the data needs to be "re-routed" using linux IP forwarding on the device Grott is running. In this mode Grott "sees" every IP package and when a Growatt TCP packages passes it will be processed and a MQTT will be sent if inverter status information is detected. 
+This fork exists because Grott is useful and people still depend on it. The original project, history, and most of the core parser are from [`johanmeijer/grott`](https://github.com/johanmeijer/grott). Older upstream release notes are still available in [Version_history.txt](Version_history.txt), and the upstream wiki remains useful for deeper Grott background.
 
-With the proxy mode Grott is listening on a IP port (default 5279), processes the data (sent MQTT message) and routes the original packet to the growatt website. 
-
-The proxy mode functionality can be enabled by: 
-
-- mode = proxy in the conf.ini file 
-- m proxy parameter during startup
-
-Pro / Cons: 
-
-    sniff mode
-    + Data will also be routed to the growatt server if Grott is not active
-    - All TCP packages (also not growatt) need to be processed by Grott. 
-      This is more resource (processor) intesive and can have a negative impact on the device performance.
-    - Configure IP forwarding can be complex if a lot of other network routing is configured (e.g. by Docker). 
-    - Sudo rights necessary to allow network sniffering
-    
-    proxy mode: 
-    + Simple configuration 
-    + Only Growatt IP records are being analysed and processed by Grott 
-    + Less resource intensive 
-    + No sudo rights needed
-    + Blocking / Filtering of commands from the outside is possible
-    - If Grott is not running no data will be sent to the Growatt server
-
-The adivse is to use the proxy mode. This mode is strategic and will be used for enhanced features like automatic protocol detection and command blocking filtering.  
-<br>
-Sniff mode is not supported under Windows
-<br>
-In sniff mode it is necessary to run Grott with SUDO rights. 
-
-#### Minimal installation 
-The following modules are needed the use Grott:
-- grott.py
-- grott.ini (available in examples direcory) 
-- grottconf.py
-- grottdata.py
-- grottproxy.py
-- grottsniffer.py
-
-#### More Version History: see Version_history.txt file. 
-#### Grott is a "hobby" project you can use it as it is (with the potential errors and imperfections). Remarks and requests for improvement are welcome. 
+If this fork helps you, please also remember that the original Grott author did the hard work of figuring out the Growatt packet flow in the first place.

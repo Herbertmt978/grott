@@ -1,38 +1,22 @@
-version: '3.3'
 services:
-    grott:
-        #network_mode: host
-        #image: ledidobe/grott
-        image: ledidobe/grott
-        container_name: grott
-        restart: unless-stopped
-        ports:
-            - "5279:5279"
-        volumes:
-            #- /opt/grott/grottstub.ini:/app/grott.ini
-            #- /opt/grott/grottstub.py:/app/grottext.py
-        environment:
-            - gblockcmd=False 
-            - gnomqtt=False
-            - gmqttip=localhost
-            - gmqttauth=False
-            - gmqttuser=growatt
-            - gmqttpassword=growatt2020
-            - gpvoutput=False
-            - gpvapikey=yourapikey 
-            - gpvinverterid1
-            - gpvsystemid1=12345
-            - ginflux=False
-            - ginflux2=False
-            - gifdbname=grottdb
-            - gifip=localhost
-            - gifport=8086
-            - gifuser=grott
-            - gigpassword=growatt2020
-            - giftoken=influx_token
-            - giforg=grottorg
-            - gifbucket=grottdb
-            - gextension=false
-            - gextname=grottext
-            - 'gextvar = {"ip": "192.168.0.47", "port": "8000"}'
-            - TZ=Europe/Amsterdam 
+  grott:
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
+    image: grott-ha-docker:local
+    container_name: grott
+    restart: unless-stopped
+    ports:
+      - "5279:5279"
+    volumes:
+      - ./grott.ini:/app/grott.ini:ro
+    environment:
+      - TZ=Europe/London
+      - gmode=proxy
+      - gblockcmd=True
+      - gtime=server
+      - gsendbuf=False
+      - ginvtype=default
+      - glayoutstrict=False
+      - glayoutautofamily=True
+      - gnomqtt=True

@@ -22,6 +22,9 @@ class Conf :
         self.compat = False
         self.invtype = "default"                                                                    #specify sepcial invertype default (spf, sph)
         self.invtypemap = {}
+        self.layout_strict = False                                                                   #force legacy invtype layout selection
+        self.layout_auto_family = True                                                               #try known family layouts in guarded selector
+        self.layout_min_score = 20                                                                   #minimum score for a selected layout
         self.includeall = False                                                                      #Include all defined keys from layout (also incl = no)
         self.blockcmd = False                                                                       #Block Inverter and Shine configure commands                
         self.noipf = False                                                                          #Allow IP change if needed
@@ -204,6 +207,9 @@ class Conf :
         print("\tcompat:              \t",self.compat)
         print("\tinvtype:             \t",self.invtype)
         print("\tinvtypemap:          \t",self.invtypemap)
+        print("\tlayout_strict:       \t",self.layout_strict)
+        print("\tlayout_auto_family:  \t",self.layout_auto_family)
+        print("\tlayout_min_score:    \t",self.layout_min_score)
         print("\tinclude_all:         \t",self.includeall)
         print("\tblockcmd:            \t",self.blockcmd)
         print("\tnoipf:               \t",self.noipf)
@@ -345,6 +351,8 @@ class Conf :
         self.mqttmtopic = str2bool(self.mqttmtopic)        
         self.mqttauth = str2bool(self.mqttauth)
         self.mqttretain = str2bool(self.mqttretain)
+        self.layout_strict = str2bool(self.layout_strict)
+        self.layout_auto_family = str2bool(self.layout_auto_family)
         #
         self.pvoutput = str2bool(self.pvoutput)
         self.pvdisv1 = str2bool(self.pvdisv1)
@@ -365,6 +373,9 @@ class Conf :
         if config.has_option("Generic","includeall"): self.includeall = config.getboolean("Generic","includeall")
         if config.has_option("Generic","invtype"): self.invtype = config.get("Generic","invtype")
         if config.has_option("Generic","invtypemap"): self.invtypemap = eval(config.get("Generic","invtypemap"))
+        if config.has_option("Generic","layout_strict"): self.layout_strict = config.getboolean("Generic","layout_strict")
+        if config.has_option("Generic","layout_auto_family"): self.layout_auto_family = config.getboolean("Generic","layout_auto_family")
+        if config.has_option("Generic","layout_min_score"): self.layout_min_score = config.getint("Generic","layout_min_score")
         if config.has_option("Generic","inverterid"): self.inverterid = config.get("Generic","inverterid")
         if config.has_option("Generic","blockcmd"): self.blockcmd = config.get("Generic","blockcmd")
         if config.has_option("Generic","noipf"): self.noipf = config.get("Generic","noipf")
@@ -434,6 +445,9 @@ class Conf :
         if os.getenv('gincludeall') != None :  self.includeall = self.getenv('gincludeall')
         if os.getenv('ginvtype') != None :  self.invtype = self.getenv('ginvtype')
         if os.getenv('ginvtypemap') != None :  self.invtypemap = eval(self.getenv('ginvtypemap'))
+        if os.getenv('glayoutstrict') != None : self.layout_strict = self.getenv('glayoutstrict')
+        if os.getenv('glayoutautofamily') != None : self.layout_auto_family = self.getenv('glayoutautofamily')
+        if os.getenv('glayoutminscore') != None : self.layout_min_score = int(self.getenv('glayoutminscore'))
         if os.getenv('gblockcmd') != None : self.blockcmd = self.getenv('gblockcmd')
         if os.getenv('gnoipf') != None : self.noipf = self.getenv('gnoipf')
         if os.getenv('gtime') in ("auto", "server") : self.gtime = self.getenv('gtime')

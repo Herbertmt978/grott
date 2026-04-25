@@ -17,6 +17,7 @@ from typing import Dict
 
 #import mqtt                       
 import paho.mqtt.publish as publish
+from grottlayout import base_layout_name, generic_layout_name, normalize_key, select_layout
 
 
 class GrottPvOutLimit:
@@ -96,12 +97,10 @@ def procdata(conf,data):
             print("\t - " + "Grott automatic protocol detection")  
             print("\t - " + "Grott data record length", ndata)
         #print(header)
-        layout = "T" + header[6:8] + header[12:14] + header[14:16]
-        #v270 add X for extended except for smart monitor records
-        if ((ndata > 375) and not is_smart_meter) :  layout = layout + "X"
+        layout = base_layout_name(header, ndata, is_smart_meter)
 
         #v270 no invtype added to layout for smart monitor records
-        if (conf.invtype != "default") and not is_smart_meter :
+        if (conf.layout_strict) and (conf.invtype != "default") and not is_smart_meter :
                 layout = layout + conf.invtype.upper()
 
         if header[14:16] == "50" : buffered = "yes"
@@ -114,18 +113,15 @@ def procdata(conf,data):
         except:
             #try generic if generic record exist
             if conf.verbose : print("\t - " + "no matching record layout found, try generic")
-            if header[14:16] in ("04","50") :
-                layout = layout.replace(header[12:16], "NNNN")
-                try:
-                    # does generic record layout record exists? 
-                    test = conf.recorddict[layout]
-                except:
-                    #no valid record fall back on old processing? 
-                    if conf.verbose : print("\t - " + "no matching record layout found, standard processing performed")
-                    layout = "none"
-                    novalidrec = True  
-            else:         
-                novalidrec = True     
+            layout = generic_layout_name(layout, header[12:14], header[14:16])
+            try:
+                # does generic record layout record exists?
+                test = conf.recorddict[layout]
+            except:
+                #no valid record fall back on old processing?
+                if conf.verbose : print("\t - " + "no matching record layout found, standard processing performed")
+                layout = "none"
+                novalidrec = True
     
         conf.layout = layout
         if conf.verbose : print("\t - " + "Record layout used : ", layout)
@@ -150,6 +146,16 @@ def procdata(conf,data):
         print("\t - " + 'Growatt plain data:')
         print(format_multi_line("\t\t ", result_string))
         #debug only: print(result_string)
+
+    if conf.compat is False and novalidrec is False:
+        selection = select_layout(conf, header, ndata, is_smart_meter, result_string, layout)
+        if conf.verbose:
+            print("\t - Layout selected: ", selection.layout, "score:", selection.score)
+            for rejected_layout, reasons in selection.rejected.items():
+                if rejected_layout != selection.layout:
+                    print("\t\t - rejected", rejected_layout, ":", "; ".join(reasons))
+        layout = selection.layout
+        conf.layout = layout
 
     # test position : 
     # print(result_string.find('0074' ))
@@ -264,9 +270,9 @@ def procdata(conf,data):
                             if float(logdict[conf.recorddict[layout][keyword]["pos"]-1]) < 0 : 
                                 definedkey[keyword] = logdict[conf.recorddict[layout][keyword]["pos"]-1]    
                             else : definedkey[keyword] = 0
-                except: 
-                    if conf.verbose : print("\t - grottdata - error in keyword processing : ", keyword + " ,data processing stopped") 
-                    return(8) 
+                except Exception as error:
+                    if conf.verbose : print("\t - grottdata - error in keyword processing : ", keyword, "skipped:", error)
+                    continue
                                  
         # test if pvserial was defined, if not take inverterid from config.
         device_defined = False 
@@ -461,7 +467,7 @@ def procdata(conf,data):
                 #print(type(definedkey[key]))                                 
                 #if type(definedkey[key]) == type(1) :                                                                     
                 #    jsonobj["values"][key] = definedkey[key]
-            jsonobj["values"][key] = definedkey[key]
+            jsonobj["values"][normalize_key(key)] = definedkey[key]
                      
         jsonmsg = json.dumps(jsonobj) 
         

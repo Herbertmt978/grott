@@ -1,15 +1,16 @@
 ARG BUILD_FROM=python:3.11-slim
 FROM ${BUILD_FROM}
 
-ARG BUILD_VERSION
-ARG BUILD_ARCH
+ARG BUILD_VERSION=0.1.1-beta
 ARG GROTT_REPO=https://github.com/Herbertmt978/grott.git
-ARG GROTT_REF=v0.1.0-beta
+ARG GROTT_REF=v0.1.1-beta
 
 LABEL \
     io.hass.version="${BUILD_VERSION}" \
-    io.hass.type="addon" \
-    io.hass.arch="${BUILD_ARCH}"
+    io.hass.type="app" \
+    io.hass.arch="aarch64|amd64|armv7|i386" \
+    org.opencontainers.image.source="https://github.com/Herbertmt978/grott" \
+    org.opencontainers.image.description="Grott Home Assistant add-on with guarded Growatt layout selection"
 
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app

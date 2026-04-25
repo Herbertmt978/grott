@@ -2,6 +2,8 @@
 
 Grott HA Docker is a beta Home Assistant add-on for Growatt/ShineWiFi telemetry. It runs Grott in proxy mode, forwards packets to Growatt, and publishes sane Home Assistant MQTT discovery using guarded layout selection.
 
+This add-on uses the prebuilt GHCR image `ghcr.io/herbertmt978/grott-ha-docker`. Home Assistant should download the image tag matching the add-on version instead of building on the HA box.
+
 ## Recommended Setup
 
 Point each Growatt/ShineWiFi datalogger at your Home Assistant host on port `5279`.
@@ -36,3 +38,17 @@ homeassistant/sensor/grott/
 ```
 
 Stable corrected sensors should then be recreated automatically on the next live packet.
+
+Dry-run the cleanup helper first from a machine that can reach your MQTT broker:
+
+```sh
+python tools/ha_discovery_cleanup.py --host MQTT_HOST --device DATALOGGER_SERIAL --all
+```
+
+If the listed topics are only the stale Grott discovery topics you intend to remove, run it again with `--execute`:
+
+```sh
+python tools/ha_discovery_cleanup.py --host MQTT_HOST --device DATALOGGER_SERIAL --all --execute
+```
+
+Use `--keep pvpowerout,SOC` instead of `--all` when you want to preserve known-good attributes and only clear legacy leftovers.

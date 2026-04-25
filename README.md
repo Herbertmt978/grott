@@ -20,7 +20,23 @@ https://github.com/Herbertmt978/grott
 3. Install **Grott HA Docker**.
 4. Point each Growatt/ShineWiFi datalogger at your Home Assistant host on port `5279`.
 
-The current beta release is [`v0.1.0-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.0-beta).
+The current beta release is [`v0.1.1-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.1-beta). The add-on uses the prebuilt GHCR image `ghcr.io/herbertmt978/grott-ha-docker`, so Home Assistant should not need to build it locally. Current prebuilt images cover `aarch64`, `amd64`, `armv7`, and `i386`; `armhf` is not advertised until we have a reliable ARMv6 image path.
+
+Docker users can run the matching runtime image:
+
+```yaml
+services:
+  grott:
+    image: ghcr.io/herbertmt978/grott:0.1.1-beta
+    container_name: grott
+    restart: unless-stopped
+    ports:
+      - "5279:5279"
+    volumes:
+      - ./grott.ini:/app/grott.ini
+    environment:
+      - TZ=Europe/London
+```
 
 Recommended proxy defaults for Growatt/ShineWiFi telemetry:
 
@@ -36,6 +52,14 @@ layout_auto_family = True
 ```
 
 Use `layout_strict=True` only when you need legacy forced `invtype` behavior. The guarded selector can prefer a configured family such as `sph`, but it falls back to the safer generic layout when the family layout produces implausible values.
+
+If you are migrating from a Grott install that created bad retained Home Assistant discovery entities, dry-run the cleanup helper before deleting anything:
+
+```sh
+python tools/ha_discovery_cleanup.py --host MQTT_HOST --device DATALOGGER_SERIAL --all
+```
+
+Re-run with `--execute` only after checking the topic list. Licensing is not fully settled upstream yet; see [`docs/LEGAL.md`](docs/LEGAL.md) before promoting this fork widely.
 
 Growatt inverters can send performance and status metrics (log data) to the Growatt company servers. The inverters rely on either a ShineWIFI module or a ShineLAN box to relay the data to Growatt. The metrics stored on the Growatt servers then can be viewed on the Growatt website or using the ShinePhone mobile app. 
 

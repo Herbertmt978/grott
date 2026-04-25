@@ -1,0 +1,55 @@
+name: Layout request
+description: Ask for a new or corrected Growatt packet layout.
+title: "[Layout]: "
+labels:
+  - layout
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Layout fixes need real evidence. Please include sanitized packet output and matching ShinePhone values captured at the same time.
+  - type: input
+    id: inverter
+    attributes:
+      label: Inverter model
+      placeholder: SPH5000, MIN 4200TL-X, MOD 9000TL3-X...
+    validations:
+      required: true
+  - type: input
+    id: datalogger
+    attributes:
+      label: Datalogger model
+      placeholder: ShineWiFi-X, ShineLAN-X...
+  - type: input
+    id: current_invtype
+    attributes:
+      label: Current invtype setting
+      placeholder: default, sph, spa, tl3, min...
+  - type: textarea
+    id: grott_log
+    attributes:
+      label: Sanitized verbose Grott packet output
+      description: Include the record header, selected layout, parsed values, and any layout rejection messages. Remove serials if you want, but keep values internally consistent.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: shinephone_values
+    attributes:
+      label: Matching ShinePhone values
+      description: Capture these at the same time as the Grott packet.
+      placeholder: PV power, grid import/export, battery SOC, battery charge/discharge, today generation...
+    validations:
+      required: true
+  - type: textarea
+    id: ha_entities
+    attributes:
+      label: Home Assistant symptoms
+      placeholder: Empty sensors, wrong units, wrong sign, missing battery entities...
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Fixture consent
+      options:
+        - label: I am happy for sanitized packet data from this issue to be turned into a public test fixture.
+          required: true

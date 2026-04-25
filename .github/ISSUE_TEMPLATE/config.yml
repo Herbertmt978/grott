@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Upstream issue 697
+    url: https://github.com/johanmeijer/grott/issues/697
+    about: Background on the ShineWiFi/Growatt telemetry problem that led to this fork.

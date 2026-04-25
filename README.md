@@ -13,6 +13,7 @@ What this fork changes since the fork point:
 - Adds guarded layout selection so Grott can try the configured inverter family, reject implausible parses, and fall back to safer generic layouts instead of publishing empty or nonsense sensors.
 - Carries the practical fix for affected ShineWiFi/Growatt telemetry: proxy mode, `blockcmd=True`, `time=server`, and `sendbuf=False` are the recommended defaults.
 - Packages Grott as a Home Assistant add-on repository with MQTT discovery enabled by default.
+- Uses the maintained [`grott-ha-plugin`](https://github.com/egguy/grott-ha-plugin) for Home Assistant MQTT discovery so entity naming matches the working HA setups this fork was tested against.
 - Publishes prebuilt GHCR images for Docker and Home Assistant so HA boxes do not have to build Grott locally.
 - Cleans up Home Assistant MQTT discovery keys so invalid names do not create broken entities.
 - Adds a dry-run first helper for clearing stale retained Grott discovery topics during migration.
@@ -31,14 +32,18 @@ https://github.com/Herbertmt978/grott
 3. Install **Grott HA Docker**.
 4. Point each Growatt/ShineWiFi datalogger at your Home Assistant host on port `5279`.
 
-The current beta release is [`v0.1.2-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.2-beta). The add-on uses the prebuilt GHCR image `ghcr.io/herbertmt978/grott-ha-docker`, so Home Assistant should not need to build it locally. Current prebuilt images cover `aarch64`, `amd64`, `armv7`, and `i386`; `armhf` is not advertised until we have a reliable ARMv6 image path.
+The current beta release is [`v0.1.3-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.3-beta). The add-on uses the prebuilt GHCR image `ghcr.io/herbertmt978/grott-ha-docker`, so Home Assistant should not need to build it locally. Current prebuilt images cover `aarch64`, `amd64`, `armv7`, and `i386`; `armhf` is not advertised until we have a reliable ARMv6 image path.
+
+This is still a beta. It has been tested against a real ShineWiFi/SPH Home Assistant setup and sanitized packet fixtures for the common layouts already in this fork, but Growatt has a lot of inverter and datalogger combinations. If your setup creates empty, wrong, or missing sensors, please open a layout request and include sanitized verbose Grott packet output plus the values shown in ShinePhone at the same time.
+
+`v0.1.1-beta` was removed because its first multi-architecture image publish failed before a usable release existed. Use `v0.1.3-beta` or newer.
 
 Docker users can run the matching runtime image:
 
 ```yaml
 services:
   grott:
-    image: ghcr.io/herbertmt978/grott:0.1.2-beta
+    image: ghcr.io/herbertmt978/grott:0.1.3-beta
     container_name: grott
     restart: unless-stopped
     ports:
@@ -60,9 +65,27 @@ sendbuf = False
 invtype = default
 layout_strict = False
 layout_auto_family = True
+
+[MQTT]
+nomqtt = True
+
+[extension]
+extension = True
+extname = grottext.ha
+extvar = {"ha_mqtt_host": "MQTT_HOST", "ha_mqtt_port": 1883, "ha_mqtt_user": "MQTT_USER", "ha_mqtt_password": "MQTT_PASSWORD", "ha_mqtt_retain": False}
 ```
 
 Use `layout_strict=True` only when you need legacy forced `invtype` behavior. The guarded selector can prefer a configured family such as `sph`, but it falls back to the safer generic layout when the family layout produces implausible values.
+
+First run checklist:
+
+1. Confirm your MQTT broker is reachable from Grott.
+2. Point each datalogger at the Grott host on TCP port `5279`.
+3. Start Grott and wait for a fresh packet from the datalogger.
+4. Check the Grott log for a parsed record and an MQTT publish.
+5. In Home Assistant, check the MQTT integration for a Grott device and sensors.
+
+Rollback is straightforward. For Docker, change the image back to your previous tag, for example `ledidobe/grott:2.8.3_240731`, and restart the container. For the Home Assistant add-on, restore your previous add-on options or reinstall the previous add-on repository you were using. Dataloggers can keep pointing at the same Grott host and port as long as the replacement Grott service listens on `5279`.
 
 If you are migrating from a Grott install that created bad retained Home Assistant discovery entities, dry-run the cleanup helper before deleting anything:
 

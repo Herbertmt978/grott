@@ -6,7 +6,7 @@
 import configparser, sys, argparse, os, json, io
 import ipaddress
 from os import walk
-from grottdata import format_multi_line, str2bool
+from grottdata import format_multi_line, redact_sensitive, str2bool
 
 class Conf : 
 
@@ -242,9 +242,9 @@ class Conf :
         print("_PVOutput:")
         print("\tpvoutput:            \t",self.pvoutput)
         print("\tpvdisv1:             \t",self.pvdisv1)
-        print("\tpvtemp:              \t",self.pvtemp)   
+        print("\tpvtemp:              \t",self.pvtemp)
         print("\tpvurl:               \t",self.pvurl)
-        print("\tpvapikey:            \t",self.pvapikey)                
+        print("\tpvapikey:            \t","**secret**")
         print("\tpvinverters:         \t",self.pvinverters)
         if self.pvinverters == 1 :
             print("\tpvsystemid:          \t",self.pvsystemid[1])
@@ -266,9 +266,9 @@ class Conf :
         #print("\ttoken:       \t",self.iftoken)  
         
         print("_Extension:")
-        print("\textension:          \t",self.extension) 
-        print("\textname:            \t",self.extname)  
-        print("\textvar:             \t",self.extvar) 
+        print("\textension:          \t",self.extension)
+        print("\textname:            \t",self.extname)
+        print("\textvar:             \t",redact_sensitive(self.extvar))
          
         print()
 

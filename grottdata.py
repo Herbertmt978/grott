@@ -20,6 +20,36 @@ import paho.mqtt.publish as publish
 from grottlayout import base_layout_name, generic_layout_name, normalize_key, select_layout
 
 
+SENSITIVE_KEY_MARKERS = (
+    "password",
+    "passwd",
+    "secret",
+    "token",
+    "apikey",
+    "api_key",
+    "access_key",
+    "private_key",
+    "client_secret",
+)
+
+
+def redact_sensitive(value):
+    if isinstance(value, dict):
+        redacted = {}
+        for key, item in value.items():
+            key_text = str(key).lower()
+            if any(marker in key_text for marker in SENSITIVE_KEY_MARKERS):
+                redacted[key] = "**secret**"
+            else:
+                redacted[key] = redact_sensitive(item)
+        return redacted
+    if isinstance(value, list):
+        return [redact_sensitive(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(redact_sensitive(item) for item in value)
+    return value
+
+
 class GrottPvOutLimit:
 
     def __init__(self):
@@ -557,7 +587,7 @@ def procdata(conf,data):
                     pvdata["v5"] = definedkey["pvtemperature"]/10
                 
                 #print(pvdata)
-                if conf.verbose : print("\t\t - ", pvheader)
+                if conf.verbose : print("\t\t - ", redact_sensitive(pvheader))
                 if conf.verbose : print("\t\t - ", pvdata)
                 reqret = requests.post(conf.pvurl, data = pvdata, headers = pvheader)
                 if conf.verbose :  print("\t - " + "Grott PVOutput response: ") 
@@ -582,7 +612,7 @@ def procdata(conf,data):
                    }                       
                     #"v4"    : definedkey["pos_act_power"]/10,
                 #print(pvheader)
-                if conf.verbose : print("\t\t - ", pvheader)
+                if conf.verbose : print("\t\t - ", redact_sensitive(pvheader))
                 if conf.verbose : print("\t\t - ", pvdata1)
                 if conf.verbose : print("\t\t - ", pvdata2)
                 reqret = requests.post(conf.pvurl, data = pvdata1, headers = pvheader)

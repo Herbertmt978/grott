@@ -1,3 +1,8 @@
+from argparse import Namespace
+
+import pytest
+
+from tools import ha_discovery_cleanup
 from tools.ha_discovery_cleanup import cleanup_plan, discovery_pattern, extract_attribute, parse_keep
 
 
@@ -46,3 +51,43 @@ def test_cleanup_plan_can_clear_all_for_a_device():
 
 def test_parse_keep_trims_empty_values():
     assert parse_keep("pvpowerout, SOC,,") == {"pvpowerout", "SOC"}
+
+
+class ConnackFailureClient:
+    def __init__(self):
+        self.on_connect = None
+        self.on_message = None
+        self.loop_stopped = False
+        self.disconnected = False
+
+    def connect(self, _host, _port, keepalive=30):
+        return 0
+
+    def loop_start(self):
+        self.on_connect(self, None, None, 5)
+
+    def loop_stop(self):
+        self.loop_stopped = True
+
+    def disconnect(self):
+        self.disconnected = True
+
+
+def test_discover_topics_surfaces_connack_failure(monkeypatch):
+    client = ConnackFailureClient()
+    monkeypatch.setattr(ha_discovery_cleanup, "mqtt_client", lambda _username, _password: client)
+    args = Namespace(
+        host="mqtt.local",
+        port=1883,
+        username=None,
+        password=None,
+        prefix="homeassistant/sensor/grott",
+        device="DL12345678",
+        timeout=0.1,
+    )
+
+    with pytest.raises(SystemExit, match="MQTT connect failed with rc=5"):
+        ha_discovery_cleanup.discover_topics(args)
+
+    assert client.loop_stopped is True
+    assert client.disconnected is True

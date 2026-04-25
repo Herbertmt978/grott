@@ -82,11 +82,12 @@ def discover_topics(args: argparse.Namespace) -> list[str]:
     topics: list[str] = []
     pattern = discovery_pattern(args.prefix, args.device)
     client = mqtt_client(args.username, args.password)
+    connect_rc: dict[str, int | None] = {"value": None}
 
     def on_connect(client, _userdata, _flags, rc):
-        if rc != 0:
-            raise SystemExit(f"MQTT connect failed with rc={rc}")
-        client.subscribe(pattern)
+        connect_rc["value"] = rc
+        if rc == 0:
+            client.subscribe(pattern)
 
     def on_message(_client, _userdata, message):
         if message.retain and message.payload:
@@ -94,17 +95,34 @@ def discover_topics(args: argparse.Namespace) -> list[str]:
 
     client.on_connect = on_connect
     client.on_message = on_message
-    client.connect(args.host, args.port, keepalive=30)
+    rc = client.connect(args.host, args.port, keepalive=30)
+    if rc != 0:
+        raise SystemExit(f"MQTT connect failed with rc={rc}")
+
+    deadline = time.monotonic() + args.timeout
     client.loop_start()
-    time.sleep(args.timeout)
-    client.loop_stop()
-    client.disconnect()
+    try:
+        while connect_rc["value"] is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+        if connect_rc["value"] is None:
+            raise SystemExit("MQTT connect timed out")
+        if connect_rc["value"] != 0:
+            raise SystemExit(f"MQTT connect failed with rc={connect_rc['value']}")
+
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            time.sleep(remaining)
+    finally:
+        client.loop_stop()
+        client.disconnect()
     return sorted(set(topics))
 
 
 def clear_topics(args: argparse.Namespace, targets: list[CleanupTarget]) -> None:
     client = mqtt_client(args.username, args.password)
-    client.connect(args.host, args.port, keepalive=30)
+    rc = client.connect(args.host, args.port, keepalive=30)
+    if rc != 0:
+        raise SystemExit(f"MQTT connect failed with rc={rc}")
     client.loop_start()
     try:
         for target in targets:

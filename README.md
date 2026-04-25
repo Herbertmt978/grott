@@ -162,6 +162,28 @@ docker logs -f grott
 
 `nomqtt = True` only disables Grott's older native MQTT JSON output. Home Assistant discovery and state publishing are handled by the `grottext.ha` extension in this image.
 
+## If Your Datalogger Already Points At Home Assistant
+
+Some ShineWiFi-X devices are already configured to send data to the Home Assistant IP address. If you want to move Grott into Docker on another VM, NAS, or Linux host, you do not have to reconfigure the datalogger straight away.
+
+Use [`HA Forwarder`](https://github.com/Herbertmt978/HA_Forwarder) on Home Assistant to listen on port `5279` and forward that TCP traffic to the machine running Grott:
+
+```text
+ShineWiFi-X -> Home Assistant HA Forwarder -> Grott Docker VM -> Growatt servers
+                                             |
+                                             +-> MQTT -> Home Assistant
+```
+
+In HA Forwarder, set:
+
+```yaml
+listen_port: 5279
+target_host: "GROTT_DOCKER_HOST"
+target_port: 5279
+```
+
+Replace `GROTT_DOCKER_HOST` with the hostname or IP address of the VM running the Grott Docker container. This is useful when Home Assistant is the stable address your dataloggers already know, but you prefer to run Grott somewhere else.
+
 ## Configure The Growatt Datalogger
 
 Your datalogger must be told to send data to Grott instead of sending directly to Growatt. In proxy mode, Grott forwards the packet to Growatt after reading it, so ShinePhone should continue to receive data.

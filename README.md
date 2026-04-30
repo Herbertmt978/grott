@@ -1,7 +1,5 @@
 # Grott HA Docker
 
-[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/donate?business=RQFS46F9JTESQ&item_name=Grott+&currency_code=EUR)
-
 Grott HA Docker is a maintained beta fork of [`johanmeijer/grott`](https://github.com/johanmeijer/grott) for people who want Growatt/ShineWiFi data in Home Assistant without relying on the Growatt cloud API.
 
 Grott sits between your Growatt datalogger and the Growatt servers. Your datalogger sends the normal inverter packets to Grott, Grott reads them, forwards them on to Growatt, and publishes Home Assistant-friendly MQTT discovery and sensor state.

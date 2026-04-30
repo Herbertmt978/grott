@@ -1,5 +1,4 @@
 paho-mqtt>=1.6,<3
-grott-ha-plugin>=0.11,<0.12
 requests>=2.31
 influxdb>=5.3
 influxdb-client>=1.36

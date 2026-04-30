@@ -2,9 +2,19 @@ import importlib.util
 from pathlib import Path
 
 
-_PLUGIN_PATH = (
-    Path(__file__).resolve().parents[1] / "examples" / "Home Assistent" / "grott_ha.py"
-)
+def resolve_plugin_path(base_path: Path | None = None) -> Path:
+    root = (base_path or Path(__file__).resolve().parents[1]).resolve()
+    candidates = (
+        root / "examples" / "Home Assistent" / "grott_ha.py",
+        root / "grott_ha.py",
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError("Could not locate grott_ha.py for the local HA extension")
+
+
+_PLUGIN_PATH = resolve_plugin_path()
 _SPEC = importlib.util.spec_from_file_location("grott_ha_example", _PLUGIN_PATH)
 _MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MODULE)

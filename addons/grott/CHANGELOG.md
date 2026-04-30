@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Stop publishing `expire_after` on measurement sensors such as `pvpowerout` so Home Assistant keeps the last value overnight instead of forcing `unavailable` after 15 minutes without fresh telemetry.
+- Keep `expire_after=900` on `grott_last_push` so it remains a freshness indicator when Grott stops receiving live packets.
+- Remove the external `grott-ha-plugin` runtime dependency from the Docker image path and copy the in-repo `grottext` package into the image instead.
+
 ## 0.1.7-beta
 
 - Add explicit diagnostic logs for blocked records so it is clear they were stopped before forwarding to Growatt and before local publish.

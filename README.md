@@ -54,9 +54,11 @@ You need three things:
 
 1. A Home Assistant host, Docker host, or VM that your Growatt datalogger can reach on your local network.
 2. A stable IP address for that host. A DHCP reservation on your router is usually enough.
-3. MQTT set up in Home Assistant.
+3. The official Home Assistant MQTT integration set up in discovery mode.
 
-Home Assistant will not show the sensors unless the [MQTT integration](https://www.home-assistant.io/integrations/mqtt/) is installed and connected to a broker. If you use Home Assistant OS, the easiest path is usually the official Mosquitto broker add-on plus the MQTT integration.
+Home Assistant will not show the sensors unless the official [MQTT integration](https://www.home-assistant.io/integrations/mqtt/) is installed and connected to a broker with MQTT discovery enabled.
+
+If you use Home Assistant OS, this add-on is configured around the official [Mosquitto broker add-on](https://github.com/home-assistant/addons/blob/master/mosquitto/DOCS.md) and the official MQTT integration in discovery mode. The default add-on options use `mqtt_host: core-mosquitto` and `mqtt_port: 1883` for that setup.
 
 MQTT discovery should stay enabled. Home Assistant enables MQTT discovery by default, and this fork uses it to create the Grott devices and sensors automatically.
 
@@ -89,6 +91,8 @@ This is the easiest install if Grott will run on the same Home Assistant machine
    mqtt_port: 1883
    mqtt_retain: false
    ```
+
+   These defaults assume the official Mosquitto broker add-on and the official MQTT integration with discovery enabled.
 
 5. If your MQTT broker requires authentication, set `mqtt_user` and `mqtt_password`.
 6. Start the add-on.
@@ -161,6 +165,8 @@ docker logs -f grott
 ```
 
 `nomqtt = True` only disables Grott's older native MQTT JSON output. Home Assistant discovery and state publishing are handled by the `grottext.ha` extension in this image.
+
+Home Assistant measurement sensors such as `pvpowerout` are published without `expire_after`, so they keep their last value if the inverter stops sending fresh overnight telemetry. Use the `grott_last_push` sensor as the freshness indicator instead.
 
 ## If Your Datalogger Already Points At Home Assistant
 
@@ -296,6 +302,7 @@ If Home Assistant shows no Grott sensors:
 - Confirm MQTT discovery is enabled.
 - Confirm Grott can reach the MQTT broker.
 - Check the Grott log for `grottext.ha`.
+- Check `grott_last_push` if you need to see whether Grott is still receiving fresh telemetry. Power sensors are intentionally allowed to keep their last value overnight.
 - Wait for a fresh datalogger packet; discovery is usually published when Grott sees live data.
 
 If Grott receives no packets:

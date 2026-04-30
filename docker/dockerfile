@@ -14,6 +14,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY grott.py grottconf.py grottdata.py grottlayout.py grottproxy.py grottsniffer.py grottserver.py /app/
+COPY grottext /app/grottext
 COPY examples/grott.ini /app/grott.ini
 COPY ["examples/Home Assistent/grott_ha.py", "/app/grott_ha.py"]
 

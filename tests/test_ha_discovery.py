@@ -31,6 +31,15 @@ def test_make_payload_uses_sanitized_unique_id_and_template():
     payload = grott_ha.make_payload(make_conf(), "INV123", "pactogrids ", "pactogrids ")
     assert payload["unique_id"] == "grott_INV123_pactogrids"
     assert payload["value_template"] == "{{ value_json.pactogrids | float / 10 }}"
+    assert "expire_after" not in payload
+
+
+def test_make_payload_keeps_expire_after_for_grott_last_push():
+    payload = grott_ha.make_payload(
+        make_conf(), "INV123", "grott_last_push", "grott_last_push"
+    )
+
+    assert payload["expire_after"] == 900
 
 
 def test_normalize_values_preserves_last_value_for_sanitized_key():

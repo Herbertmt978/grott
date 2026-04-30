@@ -335,6 +335,7 @@ mapping = {
         "name": "Grott last data push",
         "device_class": "timestamp",
         "value_template": "{{value_json.grott_last_push}}",
+        "expire_after": 900,
     },
     "grott_last_measure": {
         "name": "Last measure",

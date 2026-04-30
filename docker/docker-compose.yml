@@ -1,9 +1,6 @@
 services:
   grott:
-    build:
-      context: ..
-      dockerfile: docker/dockerfile
-    image: grott-ha-docker:local
+    image: ghcr.io/herbertmt978/grott:0.1.7-beta
     container_name: grott
     restart: unless-stopped
     ports:

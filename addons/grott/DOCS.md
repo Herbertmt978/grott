@@ -12,6 +12,8 @@ This release is beta software. It has been tested with a real ShineWiFi/SPH Home
 
 Point each Growatt/ShineWiFi datalogger at your Home Assistant host on port `5279`.
 
+This add-on is configured around the official [Mosquitto broker add-on](https://github.com/home-assistant/addons/blob/master/mosquitto/DOCS.md) and the official [MQTT integration](https://www.home-assistant.io/integrations/mqtt/) with MQTT discovery enabled.
+
 Default options are intentionally conservative:
 
 ```yaml
@@ -42,11 +44,15 @@ If the add-on starts but no packets arrive, check the datalogger server setting,
 
 ## MQTT
 
-The add-on needs an MQTT broker reachable from the container. For the Mosquitto add-on, the default host is usually `core-mosquitto` and the default port is `1883`.
+The add-on needs an MQTT broker reachable from the container. For the official Mosquitto broker add-on, the default host is usually `core-mosquitto` and the default port is `1883`.
+
+The supported Home Assistant path is the official Mosquitto broker add-on plus the official MQTT integration with discovery enabled. This add-on publishes Home Assistant discovery topics under the default `homeassistant` discovery prefix.
 
 If your broker requires authentication, set `mqtt_user` and `mqtt_password` in the add-on options.
 
 The add-on publishes Home Assistant MQTT discovery through the maintained `grott-ha-plugin` extension (`grottext.ha`). Discovery config topics are retained so sensors survive Home Assistant restarts. Live state messages are not retained by default; enable `mqtt_retain` only if you understand the stale-state trade-off.
+
+Measurement sensors such as `pvpowerout` are published without `expire_after`, so they keep their last value if the inverter stops sending fresh overnight telemetry. The `grott_last_push` timestamp sensor keeps `expire_after=900` and is the recommended freshness check.
 
 ## Migration From Existing Grott Add-Ons
 

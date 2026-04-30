@@ -6,7 +6,7 @@ This add-on uses the prebuilt GHCR image `ghcr.io/herbertmt978/grott-ha-docker`.
 
 This release is beta software. It has been tested with a real ShineWiFi/SPH Home Assistant setup and the packet fixtures in the repository, but other Growatt inverter families may still need new sanitized fixtures before every sensor is correct.
 
-`0.1.1-beta` was skipped for users because its first multi-architecture image publish failed. Install `0.1.7-beta` or newer.
+`0.1.1-beta` was skipped for users because its first multi-architecture image publish failed. Install `0.1.8-beta` or newer.
 
 ## Recommended Setup
 
@@ -50,9 +50,32 @@ The supported Home Assistant path is the official Mosquitto broker add-on plus t
 
 If your broker requires authentication, set `mqtt_user` and `mqtt_password` in the add-on options.
 
-The add-on publishes Home Assistant MQTT discovery through the maintained `grott-ha-plugin` extension (`grottext.ha`). Discovery config topics are retained so sensors survive Home Assistant restarts. Live state messages are not retained by default; enable `mqtt_retain` only if you understand the stale-state trade-off.
+The add-on publishes Home Assistant MQTT discovery through the bundled `grottext.ha` extension. Discovery config topics are retained so sensors survive Home Assistant restarts. Live state messages are not retained by default; enable `mqtt_retain` only if you understand the stale-state trade-off.
 
 Measurement sensors such as `pvpowerout` are published without `expire_after`, so they keep their last value if the inverter stops sending fresh overnight telemetry. The `grott_last_push` timestamp sensor keeps `expire_after=900` and is the recommended freshness check.
+
+## Collecting Logs
+
+The add-on already runs Grott in verbose mode, so no extra debug switch is needed.
+
+To send useful support logs:
+
+1. Open **Settings -> Add-ons -> Grott HA Docker -> Log**.
+2. Restart the add-on.
+3. Wait for the failing packet or nightly problem window.
+4. Copy the startup section plus the packet-flow lines around the failure.
+
+The most useful lines are:
+
+- the startup summary showing the active publish path and MQTT target
+- `Grott: Record blocked: ...`
+- `forwarded to Growatt but not processed locally: len=... minrecl=...`
+- `Record layout used : ...`
+- `Grott extension processing started :  grottext.ha`
+- `published ... Home Assistant discovery topics`
+- `published Home Assistant state topic`
+
+Please sanitize serial numbers if needed, but keep the record type, lengths, and layout names intact.
 
 ## Migration From Existing Grott Add-Ons
 

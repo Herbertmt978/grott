@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.8-beta
 
 - Stop publishing `expire_after` on measurement sensors such as `pvpowerout` so Home Assistant keeps the last value overnight instead of forcing `unavailable` after 15 minutes without fresh telemetry.
 - Keep `expire_after=900` on `grott_last_push` so it remains a freshness indicator when Grott stops receiving live packets.

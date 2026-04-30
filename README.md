@@ -10,7 +10,7 @@ This fork keeps the upstream history intact. It exists because the problem in up
 
 ## Current Status
 
-The current beta release is [`v0.1.7-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.7-beta).
+The current beta release is [`v0.1.8-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.8-beta).
 
 This is beta software. It has been tested with a real ShineWiFi/SPH Home Assistant setup and with sanitized layout fixtures for generic, SPH, SPA, TL3, and MIN-style packets. Growatt has many inverter and datalogger combinations, so please treat new hardware combinations as testing until the values have been compared with ShinePhone.
 
@@ -26,10 +26,10 @@ The upstream project does not currently have a repository-level license. This fo
 ## What Changed In This Fork
 
 - Home Assistant add-on packaging with prebuilt GHCR images.
-- Docker images that include the Home Assistant discovery plugin.
+- Docker images that include the bundled Home Assistant discovery extension.
 - Guarded layout selection, so a bad family layout can be rejected instead of publishing nonsense sensors.
 - Recommended proxy settings for the ShineWiFi/SPH issue: `blockcmd=True`, `time=server`, and `sendbuf=False`.
-- Home Assistant MQTT discovery using [`grott-ha-plugin`](https://github.com/egguy/grott-ha-plugin).
+- Home Assistant MQTT discovery using the bundled `grottext.ha` extension with the official Mosquitto broker add-on and official MQTT integration in discovery mode.
 - Cleaner entity names and unique IDs for Home Assistant.
 - A dry-run-first helper for clearing stale retained MQTT discovery topics.
 - Tests and sanitized packet fixtures for the layouts this fork currently knows about.
@@ -116,7 +116,7 @@ Create `docker-compose.yml`:
 ```yaml
 services:
   grott:
-    image: ghcr.io/herbertmt978/grott:0.1.7-beta
+    image: ghcr.io/herbertmt978/grott:0.1.8-beta
     container_name: grott
     restart: unless-stopped
     ports:
@@ -164,7 +164,21 @@ docker compose up -d
 docker logs -f grott
 ```
 
-`nomqtt = True` only disables Grott's older native MQTT JSON output. Home Assistant discovery and state publishing are handled by the `grottext.ha` extension in this image.
+`nomqtt = True` only disables Grott's older native MQTT JSON output. Home Assistant discovery and state publishing are handled by the bundled `grottext.ha` extension in this image.
+
+The maintained Docker image already starts Grott with verbose logging enabled. To collect support logs, restart the container, reproduce the problem, and send the startup lines plus the packet-flow lines around the failure:
+
+```sh
+docker logs --since 15m grott
+```
+
+If you use Compose:
+
+```sh
+docker compose logs --since=15m grott
+```
+
+The most useful lines are the startup publish-path summary, any `Record blocked` line, any `forwarded to Growatt but not processed locally` line, the selected record layout, and the `grottext.ha` publish lines.
 
 Home Assistant measurement sensors such as `pvpowerout` are published without `expire_after`, so they keep their last value if the inverter stops sending fresh overnight telemetry. Use the `grott_last_push` sensor as the freshness indicator instead.
 
@@ -262,7 +276,7 @@ Back up your existing `grott.ini` or Home Assistant add-on options first.
 For Docker, change only the image first:
 
 ```yaml
-    image: ghcr.io/herbertmt978/grott:0.1.7-beta
+    image: ghcr.io/herbertmt978/grott:0.1.8-beta
 ```
 
 Then make sure your config includes the proxy settings:
@@ -304,6 +318,12 @@ If Home Assistant shows no Grott sensors:
 - Check the Grott log for `grottext.ha`.
 - Check `grott_last_push` if you need to see whether Grott is still receiving fresh telemetry. Power sensors are intentionally allowed to keep their last value overnight.
 - Wait for a fresh datalogger packet; discovery is usually published when Grott sees live data.
+
+If you need logs for a support issue:
+
+- Home Assistant add-on users should open **Settings -> Add-ons -> Grott HA Docker -> Log**, restart the add-on, and copy the startup lines plus the packet-flow lines around the failure.
+- Docker users should restart the container and run `docker logs --since 15m grott` or `docker compose logs --since=15m grott`.
+- Please include the active publish-path summary, blocked-record lines, short-record lines, selected layout, and `grottext.ha` publish lines.
 
 If Grott receives no packets:
 

@@ -6,7 +6,7 @@
 import configparser, sys, argparse, os, json, io
 import ipaddress
 from os import walk
-from grottdata import format_multi_line, redact_sensitive, str2bool
+from grottdata import describe_publish_path, format_multi_line, redact_sensitive, str2bool
 
 class Conf : 
 
@@ -235,6 +235,7 @@ class Conf :
         print("\tmqtttauth:           \t",self.mqttauth)
         print("\tmqttuser:            \t",self.mqttuser)
         print("\tmqttpsw:             \t","**secret**")                       #scramble output if tested!
+        print("\tpublish path:        \t",describe_publish_path(self))
         #print("\tmqttpsw:     \t",self.mqttpsw)                       #scramble output if tested!
         print("_Growatt server:")
         print("\tgrowattip:           \t",self.growattip)

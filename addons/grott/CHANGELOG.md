@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.7-beta
+
+- Add explicit diagnostic logs for blocked records so it is clear they were stopped before forwarding to Growatt and before local publish.
+- Add explicit diagnostic logs for short records that were forwarded upstream but skipped locally because they were below `minrecl`.
+- Surface the effective publish path in verbose startup output so add-on users can distinguish native MQTT from the `grottext.ha` extension path.
+- Add Home Assistant extension publish logs for discovery-topic count and state-topic success.
+- Vendor a local `grottext.ha` package shim so the add-on runtime uses the repository-tested HA extension code path.
+
 ## 0.1.6-beta
 
 - Skip low-confidence inverter records before MQTT, PVOutput, InfluxDB, or Home Assistant extension publishing.

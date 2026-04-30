@@ -195,18 +195,22 @@ class Proxy:
 
         # FILTER!!!!!!!! Detect if configure data is sent!
         header = "".join("{:02x}".format(n) for n in data[0:8])
+        recordtype = header[12:16]
+        protocol = header[6:8]
         if conf.blockcmd : 
             #standard everything is blocked!
             print("\t - " + "Growatt command block checking started") 
             blockflag = True 
+            blockreason = "record type not in whitelist"
             #partly block configure Shine commands                   
             if header[14:16] == "18" :         
+                blockreason = "configure command blocked"
                 if conf.blockcmd : 
-                    if header[6:8] == "05" or header[6:8] == "06" : confdata = decrypt(data) 
+                    if protocol == "05" or protocol == "06" : confdata = decrypt(data) 
                     else :  confdata = data
 
                     #get conf command (location depends on record type), maybe later more flexibility is needed
-                    if header[6:8] == "06" : confcmd = confdata[76:80]
+                    if protocol == "06" : confcmd = confdata[76:80]
                     else: confcmd = confdata[36:40]
                     
                     if header[14:16] == "18" : 
@@ -222,11 +226,15 @@ class Proxy:
                         if conf.verbose : print("\t - Grott: Inverter Configure command detected")
             
             #allow records: 
-            if header[12:16] in conf.recwl : blockflag = False     
+            if recordtype in conf.recwl : blockflag = False     
 
             if blockflag : 
-                print("\t - Grott: Record blocked: ", header[12:16])
-                if header[6:8] == "05" or header[6:8] == "06" : blockeddata = decrypt(data) 
+                print("\t - Grott: Record blocked: ", recordtype)
+                print(
+                    f"\t - Grott: Record {recordtype} blocked before forward to Growatt "
+                    f"and before local publish (reason: {blockreason})"
+                )
+                if protocol == "05" or protocol == "06" : blockeddata = decrypt(data) 
                 else :  blockeddata = data
                 print(format_multi_line("\t\t ",blockeddata))
                 return
@@ -237,5 +245,10 @@ class Proxy:
             #process received data
             procdata(conf,data)    
         else:     
-            if conf.verbose: print("\t - " + 'Data less then minimum record length, data not processed') 
+            if conf.verbose:
+                print(
+                    "\t - "
+                    + f"Grott record {recordtype} forwarded to Growatt but not processed locally: "
+                    + f"len={len(data)} minrecl={conf.minrecl}"
+                )
                 

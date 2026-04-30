@@ -671,6 +671,11 @@ def grottext(conf: Conf, data: str, jsonmsg: str):
                 return 6
 
         publish_multiple(conf, configs_payloads)
+        if conf.verbose:
+            print(
+                f"\tGrott HA {__version__} - published "
+                f"{len(configs_payloads)} Home Assistant discovery topics for {device_serial}"
+            )
         # Now it's configured, no need to come back
         MqttStateHandler.set_configured(device_serial)
 
@@ -683,6 +688,11 @@ def grottext(conf: Conf, data: str, jsonmsg: str):
         publish_single(
             conf, state_topic.format(device=device_serial), json.dumps(values)
         )
+        if conf.verbose:
+            print(
+                f"\tGrott HA {__version__} - published Home Assistant state topic "
+                f"for {device_serial}"
+            )
     except Exception as e:
         print("[HA ext] - Exception while publishing - {}".format(e))
         # Reset connection state in case of problem

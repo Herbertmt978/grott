@@ -78,6 +78,24 @@ def layout_selection_is_usable(conf, selection, is_smart_meter):
     return is_smart_meter or min_score <= 0 or selection.score >= min_score
 
 
+def describe_publish_path(conf) -> str:
+    if getattr(conf, "nomqtt", False):
+        native = "native MQTT disabled"
+    else:
+        native = (
+            "native MQTT enabled -> "
+            f"{getattr(conf, 'mqtttopic', 'energy/growatt')} "
+            f"@ {getattr(conf, 'mqttip', 'localhost')}:{getattr(conf, 'mqttport', 1883)}"
+        )
+
+    if getattr(conf, "extension", False):
+        extension = f"extension enabled: {getattr(conf, 'extname', 'grottext')}"
+    else:
+        extension = "extension disabled"
+
+    return f"{native}; {extension}"
+
+
 # Formats multi-line data
 def format_multi_line(prefix, string, size=80):
     size -= len(prefix)

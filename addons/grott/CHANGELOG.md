@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.9-beta
+
+- Add a `diagnostic_logging` support switch that dumps hex for short packets which were forwarded to Growatt but skipped locally because they were below `minrecl`.
+- Surface the new support switch in the Home Assistant add-on options, Docker/example config, and support docs so users can send usable short-packet evidence without enabling it permanently.
+
 ## 0.1.8-beta
 
 - Stop publishing `expire_after` on measurement sensors such as `pvpowerout` so Home Assistant keeps the last value overnight instead of forcing `unavailable` after 15 minutes without fresh telemetry.

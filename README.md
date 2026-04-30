@@ -8,7 +8,7 @@ This fork keeps the upstream history intact. It exists because the problem in up
 
 ## Current Status
 
-The current beta release is [`v0.1.8-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.8-beta).
+The current beta release is [`v0.1.9-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.9-beta).
 
 This is beta software. It has been tested with a real ShineWiFi/SPH Home Assistant setup and with sanitized layout fixtures for generic, SPH, SPA, TL3, and MIN-style packets. Growatt has many inverter and datalogger combinations, so please treat new hardware combinations as testing until the values have been compared with ShinePhone.
 
@@ -84,6 +84,7 @@ This is the easiest install if Grott will run on the same Home Assistant machine
    invtype: default
    layout_strict: false
    layout_auto_family: true
+   diagnostic_logging: false
    ha_plugin: true
    mqtt_host: core-mosquitto
    mqtt_port: 1883
@@ -114,7 +115,7 @@ Create `docker-compose.yml`:
 ```yaml
 services:
   grott:
-    image: ghcr.io/herbertmt978/grott:0.1.8-beta
+    image: ghcr.io/herbertmt978/grott:0.1.9-beta
     container_name: grott
     restart: unless-stopped
     ports:
@@ -137,6 +138,7 @@ sendbuf = False
 invtype = default
 layout_strict = False
 layout_auto_family = True
+diagnostic_logging = False
 
 [MQTT]
 nomqtt = True
@@ -164,7 +166,7 @@ docker logs -f grott
 
 `nomqtt = True` only disables Grott's older native MQTT JSON output. Home Assistant discovery and state publishing are handled by the bundled `grottext.ha` extension in this image.
 
-The maintained Docker image already starts Grott with verbose logging enabled. To collect support logs, restart the container, reproduce the problem, and send the startup lines plus the packet-flow lines around the failure:
+The maintained Docker image already starts Grott with verbose logging enabled. For normal support logs, restart the container, reproduce the problem, and send the startup lines plus the packet-flow lines around the failure:
 
 ```sh
 docker logs --since 15m grott
@@ -177,6 +179,14 @@ docker compose logs --since=15m grott
 ```
 
 The most useful lines are the startup publish-path summary, any `Record blocked` line, any `forwarded to Growatt but not processed locally` line, the selected record layout, and the `grottext.ha` publish lines.
+
+If you are chasing new short mystery packets such as `0119` or `0118`, temporarily enable:
+
+```ini
+diagnostic_logging = True
+```
+
+under `[Generic]`, restart Grott, reproduce the problem, and then send the extra `Short packet raw data:` lines as well. Leave it disabled in normal use because those packet dumps can get noisy.
 
 Home Assistant measurement sensors such as `pvpowerout` are published without `expire_after`, so they keep their last value if the inverter stops sending fresh overnight telemetry. Use the `grott_last_push` sensor as the freshness indicator instead.
 
@@ -274,7 +284,7 @@ Back up your existing `grott.ini` or Home Assistant add-on options first.
 For Docker, change only the image first:
 
 ```yaml
-    image: ghcr.io/herbertmt978/grott:0.1.8-beta
+    image: ghcr.io/herbertmt978/grott:0.1.9-beta
 ```
 
 Then make sure your config includes the proxy settings:
@@ -321,7 +331,8 @@ If you need logs for a support issue:
 
 - Home Assistant add-on users should open **Settings -> Add-ons -> Grott HA Docker -> Log**, restart the add-on, and copy the startup lines plus the packet-flow lines around the failure.
 - Docker users should restart the container and run `docker logs --since 15m grott` or `docker compose logs --since=15m grott`.
-- Please include the active publish-path summary, blocked-record lines, short-record lines, selected layout, and `grottext.ha` publish lines.
+- If the issue involves short forwarded-only packets, temporarily enable `diagnostic_logging = True` in `[Generic]` first.
+- Please include the active publish-path summary, blocked-record lines, short-record lines, any `Short packet raw data:` lines, the selected layout, and `grottext.ha` publish lines.
 
 If Grott receives no packets:
 
@@ -369,6 +380,7 @@ Please include:
 - datalogger model
 - whether you use Home Assistant add-on or Docker
 - your `invtype`, `layout_strict`, and `layout_auto_family` settings
+- whether `diagnostic_logging` was enabled
 - sanitized verbose Grott packet output
 - the ShinePhone values shown at roughly the same time
 

@@ -251,4 +251,10 @@ class Proxy:
                     + f"Grott record {recordtype} forwarded to Growatt but not processed locally: "
                     + f"len={len(data)} minrecl={conf.minrecl}"
                 )
+                if getattr(conf, "diagnostic_logging", False):
+                    print("\t - Short packet raw data:")
+                    print(format_multi_line("\t\t ", data.hex()))
+                    if protocol == "05" or protocol == "06":
+                        print("\t - Short packet decrypted data:")
+                        print(format_multi_line("\t\t ", decrypt(data)))
                 

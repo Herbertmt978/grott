@@ -29,6 +29,7 @@ export gsendbuf="$(json_get sendbuf false)"
 export ginvtype="$(json_get invtype default)"
 export glayoutstrict="$(json_get layout_strict false)"
 export glayoutautofamily="$(json_get layout_auto_family true)"
+export gdiagnosticlogging="$(json_get diagnostic_logging false)"
 
 if [ "$(json_get ha_plugin true)" = "True" ]; then
   export gextension=True

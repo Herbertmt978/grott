@@ -6,7 +6,7 @@ This add-on uses the prebuilt GHCR image `ghcr.io/herbertmt978/grott-ha-docker`.
 
 This release is beta software. It has been tested with a real ShineWiFi/SPH Home Assistant setup and the packet fixtures in the repository, but other Growatt inverter families may still need new sanitized fixtures before every sensor is correct.
 
-`0.1.1-beta` was skipped for users because its first multi-architecture image publish failed. Install `0.1.8-beta` or newer.
+`0.1.1-beta` was skipped for users because its first multi-architecture image publish failed. Install `0.1.9-beta` or newer.
 
 ## Recommended Setup
 
@@ -24,6 +24,7 @@ sendbuf: false
 invtype: default
 layout_strict: false
 layout_auto_family: true
+diagnostic_logging: false
 ha_plugin: true
 mqtt_host: core-mosquitto
 mqtt_port: 1883
@@ -56,7 +57,7 @@ Measurement sensors such as `pvpowerout` are published without `expire_after`, s
 
 ## Collecting Logs
 
-The add-on already runs Grott in verbose mode, so no extra debug switch is needed.
+The add-on already runs Grott in verbose mode, so no extra debug switch is needed for normal support.
 
 To send useful support logs:
 
@@ -65,11 +66,20 @@ To send useful support logs:
 3. Wait for the failing packet or nightly problem window.
 4. Copy the startup section plus the packet-flow lines around the failure.
 
+If the issue involves short packets that were forwarded upstream but skipped locally, temporarily set:
+
+```yaml
+diagnostic_logging: true
+```
+
+restart the add-on, reproduce the problem, and include the extra short-packet dump lines. Turn it back off afterwards because those logs can get noisy.
+
 The most useful lines are:
 
 - the startup summary showing the active publish path and MQTT target
 - `Grott: Record blocked: ...`
 - `forwarded to Growatt but not processed locally: len=... minrecl=...`
+- `Short packet raw data:`
 - `Record layout used : ...`
 - `Grott extension processing started :  grottext.ha`
 - `published ... Home Assistant discovery topics`

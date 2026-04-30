@@ -25,6 +25,7 @@ class Conf :
         self.layout_strict = False                                                                   #force legacy invtype layout selection
         self.layout_auto_family = True                                                               #try known family layouts in guarded selector
         self.layout_min_score = 20                                                                   #minimum score for a selected layout
+        self.diagnostic_logging = False                                                              #support logging for short packets that are forwarded-only
         self.includeall = False                                                                      #Include all defined keys from layout (also incl = no)
         self.blockcmd = False                                                                       #Block Inverter and Shine configure commands                
         self.noipf = False                                                                          #Allow IP change if needed
@@ -210,6 +211,7 @@ class Conf :
         print("\tlayout_strict:       \t",self.layout_strict)
         print("\tlayout_auto_family:  \t",self.layout_auto_family)
         print("\tlayout_min_score:    \t",self.layout_min_score)
+        print("\tdiagnostic_logging:  \t",self.diagnostic_logging)
         print("\tinclude_all:         \t",self.includeall)
         print("\tblockcmd:            \t",self.blockcmd)
         print("\tnoipf:               \t",self.noipf)
@@ -285,6 +287,7 @@ class Conf :
         parser.add_argument('-i',help="set inverterid, if not specified inverterid of .ini file is used",metavar="[inverterid]")
         parser.add_argument('-nm','--nomqtt',help="disable mqtt send",action='store_true')
         parser.add_argument('-t','--trace',help="enable trace, use in addition to verbose option (only available in sniff mode)",action='store_true')
+        parser.add_argument('--diagnostic-logging', help="log extra packet hex for support diagnostics", action='store_true')
         parser.add_argument('-p','--pvoutput',help="enable pvoutput send (True/False)",action='store_true')
         parser.add_argument('-b','--blockcmd',help="block Growatt configure commands",action='store_true')
         parser.add_argument('-n','--noipf',help="Allow IP change from growatt website",action='store_true')
@@ -299,6 +302,7 @@ class Conf :
         self.anomqtt = args.nomqtt
         self.apvoutput = args.pvoutput 
         self.trace = args.trace
+        self.adiagnosticlogging = args.diagnostic_logging
         self.ablockcmd = args.blockcmd
         self.anoipf = args.noipf
                 
@@ -319,6 +323,7 @@ class Conf :
             print("\tnomqtt:      \t", self.anomqtt)
             print("\tinverterid:  \t", self.inverterid)
             print("\tpvoutput:    \t", self.apvoutput)
+            print("\tdiaglog:     \t", self.adiagnosticlogging)
             print("\tblockcmd:    \t", self.ablockcmd)
             print("\tnoipf:       \t", self.noipf)
 
@@ -330,6 +335,8 @@ class Conf :
             self.blockcmd = self.ablockcmd  
         if hasattr(self, "anoipf") and self.anoipf == True: 
             self.noipf = self.anoipf      
+        if hasattr(self, "adiagnosticlogging") and self.adiagnosticlogging == True:
+            self.diagnostic_logging = self.adiagnosticlogging
         if hasattr(self, "ainverterid"): 
             self.inverterid = self.ainverterid 
         if hasattr(self, "anomqtt") and self.anomqtt: 
@@ -354,6 +361,7 @@ class Conf :
         self.mqttretain = str2bool(self.mqttretain)
         self.layout_strict = str2bool(self.layout_strict)
         self.layout_auto_family = str2bool(self.layout_auto_family)
+        self.diagnostic_logging = str2bool(self.diagnostic_logging)
         #
         self.pvoutput = str2bool(self.pvoutput)
         self.pvdisv1 = str2bool(self.pvdisv1)
@@ -377,6 +385,7 @@ class Conf :
         if config.has_option("Generic","layout_strict"): self.layout_strict = config.getboolean("Generic","layout_strict")
         if config.has_option("Generic","layout_auto_family"): self.layout_auto_family = config.getboolean("Generic","layout_auto_family")
         if config.has_option("Generic","layout_min_score"): self.layout_min_score = config.getint("Generic","layout_min_score")
+        if config.has_option("Generic","diagnostic_logging"): self.diagnostic_logging = config.getboolean("Generic","diagnostic_logging")
         if config.has_option("Generic","inverterid"): self.inverterid = config.get("Generic","inverterid")
         if config.has_option("Generic","blockcmd"): self.blockcmd = config.get("Generic","blockcmd")
         if config.has_option("Generic","noipf"): self.noipf = config.get("Generic","noipf")
@@ -449,6 +458,7 @@ class Conf :
         if os.getenv('glayoutstrict') != None : self.layout_strict = self.getenv('glayoutstrict')
         if os.getenv('glayoutautofamily') != None : self.layout_auto_family = self.getenv('glayoutautofamily')
         if os.getenv('glayoutminscore') != None : self.layout_min_score = int(self.getenv('glayoutminscore'))
+        if os.getenv('gdiagnosticlogging') != None : self.diagnostic_logging = self.getenv('gdiagnosticlogging')
         if os.getenv('gblockcmd') != None : self.blockcmd = self.getenv('gblockcmd')
         if os.getenv('gnoipf') != None : self.noipf = self.getenv('gnoipf')
         if os.getenv('gtime') in ("auto", "server") : self.gtime = self.getenv('gtime')

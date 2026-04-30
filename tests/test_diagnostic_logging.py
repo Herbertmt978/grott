@@ -28,6 +28,7 @@ def make_proxy_conf(**overrides):
         "blockcmd": False,
         "recwl": {"0104", "0150"},
         "verbose": True,
+        "diagnostic_logging": False,
         "minrecl": 100,
         "noipf": False,
     }
@@ -104,7 +105,36 @@ def test_short_record_log_reports_length_and_threshold(monkeypatch, capsys):
     assert "record 0104 forwarded to Growatt but not processed locally" in output
     assert "len=94" in output
     assert "minrecl=100" in output
+    assert "Short packet raw data" not in output
     assert target.sent == [make_packet("0104", size=94)]
+
+
+def test_diagnostic_logging_adds_short_packet_hex_dump(monkeypatch, capsys):
+    monkeypatch.setattr(grottproxy, "validate_record", lambda _data: 0)
+    packet = bytes.fromhex("000000020000011900112233445566778899aabbccddeeff")
+    proxy, _source, target = make_proxy_with_packet(packet)
+
+    proxy.on_recv(make_proxy_conf(minrecl=100, diagnostic_logging=True))
+
+    output = capsys.readouterr().out
+    assert "record 0119 forwarded to Growatt but not processed locally" in output
+    assert "Short packet raw data:" in output
+    assert "000000020000011900112233445566778899aabbccddeeff" in output
+    assert target.sent == [packet]
+
+
+def test_diagnostic_logging_decrypts_short_encrypted_packets(monkeypatch, capsys):
+    monkeypatch.setattr(grottproxy, "validate_record", lambda _data: 0)
+    packet = bytes.fromhex("0000000600000119a1b2c3d4e5f60708")
+    proxy, _source, target = make_proxy_with_packet(packet)
+
+    proxy.on_recv(make_proxy_conf(minrecl=100, diagnostic_logging=True))
+
+    output = capsys.readouterr().out
+    assert "Short packet raw data:" in output
+    assert "Growatt data decrypted V2" in output
+    assert "Short packet decrypted data:" in output
+    assert target.sent == [packet]
 
 
 def test_publish_path_summary_identifies_native_and_extension_modes():

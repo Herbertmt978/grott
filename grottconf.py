@@ -3,12 +3,151 @@
 # Updated: 2024-07-22 
 # Version 2.8.3
 
-import configparser, sys, argparse, os, json, io
+import ast, configparser, sys, argparse, os, json, io, re
 import ipaddress
 from os import walk
+from urllib.parse import urlsplit, urlunsplit
 from grottdata import describe_publish_path, format_multi_line, redact_sensitive, str2bool
 
-class Conf : 
+
+def parse_mapping(value, source):
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        try:
+            parsed = ast.literal_eval(value)
+        except (SyntaxError, ValueError):
+            raise ValueError(
+                f"{source} must be a JSON object or Python-literal dictionary; "
+                "the supplied value was rejected"
+            ) from None
+
+    if not isinstance(parsed, dict):
+        raise ValueError(
+            f"{source} must be a JSON object or Python-literal dictionary, "
+            f"not {type(parsed).__name__}"
+        )
+    return parsed
+
+
+def parse_int_setting(value, source, minimum, maximum):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"{source} must be an integer between {minimum} and {maximum}"
+        ) from None
+    if not minimum <= parsed <= maximum:
+        raise ValueError(
+            f"{source} must be an integer between {minimum} and {maximum}"
+        )
+    return parsed
+
+
+def parse_host(value, source):
+    host = value if isinstance(value, str) else ""
+    if host and not any(character.isspace() for character in host):
+        try:
+            ipaddress.ip_address(host)
+            return host
+        except ValueError:
+            if re.fullmatch(r"[0-9]+(?:\.[0-9]+){3}", host):
+                raise ValueError(
+                    f"{source} must be a non-empty IP address or DNS/service hostname"
+                ) from None
+            hostname = host[:-1] if host.endswith(".") else host
+            labels = hostname.split(".")
+            if (
+                len(hostname) <= 253
+                and all(
+                    1 <= len(label) <= 63
+                    and re.fullmatch(
+                        r"[A-Za-z0-9](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9])?",
+                        label,
+                    )
+                    for label in labels
+                )
+            ):
+                return host
+    raise ValueError(
+        f"{source} must be a non-empty IP address or DNS/service hostname"
+    )
+
+
+def parse_proxy_bind_host(value, source):
+    if value == "default":
+        return value
+    return parse_host(value, source)
+
+
+def parse_influx_address(value, source, influx2):
+    address = value if isinstance(value, str) else ""
+    if "://" not in address:
+        return parse_host(value, source)
+
+    error = (
+        f"{source} must be a non-empty IP address, DNS/service hostname, "
+        "or an http(s) URL when InfluxDB v2 is enabled"
+    )
+    if str2bool(influx2) is not True or any(
+        character.isspace() for character in address
+    ):
+        raise ValueError(error)
+
+    try:
+        parsed = urlsplit(address)
+        port = parsed.port
+    except ValueError:
+        raise ValueError(error) from None
+
+    if (
+        parsed.scheme not in ("http", "https")
+        or not parsed.netloc
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or (port is not None and not 1 <= port <= 65535)
+        or not re.fullmatch(r"(?:/[A-Za-z0-9._~%/+,:=@-]*)?", parsed.path)
+    ):
+        raise ValueError(error)
+
+    authority = parsed.netloc
+    if authority.startswith("["):
+        closing_bracket = authority.find("]")
+        suffix = authority[closing_bracket + 1 :] if closing_bracket >= 0 else ""
+        if closing_bracket < 0 or (suffix and not re.fullmatch(r":[0-9]+", suffix)):
+            raise ValueError(error)
+    elif authority.count(":") > 1:
+        raise ValueError(error)
+    elif ":" in authority and not authority.rsplit(":", 1)[1].isdigit():
+        raise ValueError(error)
+
+    try:
+        parse_host(parsed.hostname, source)
+    except ValueError:
+        raise ValueError(error) from None
+    return address
+
+
+def format_influx2_url(address, port):
+    if "://" not in address:
+        try:
+            is_ipv6 = ipaddress.ip_address(address).version == 6
+        except ValueError:
+            is_ipv6 = False
+        host = f"[{address}]" if is_ipv6 else address
+        return f"{host}:{port}"
+
+    parsed = urlsplit(address)
+    if parsed.port is not None:
+        return address
+    return urlunsplit(
+        (parsed.scheme, f"{parsed.netloc}:{port}", parsed.path, "", "")
+    )
+
+class Conf:
 
     def __init__(self, vrm): 
         self.verrel = vrm
@@ -75,6 +214,7 @@ class Conf :
         self.influx2 = False
         self.ifdbname = "grottdb"
         self.ifip = "localhost"
+        self._ifip_source = "influx.ip"
         self.ifport = 8086
         self.ifuser = "grott"
         self.ifpsw  = "growatt2020"
@@ -167,7 +307,7 @@ class Conf :
                     raise SystemExit("Grott Influxdb initialisation error")
 
                 #self.influxclient = InfluxDBClient(url='192.168.0.211:8086',org=self.iforg, token=self.iftoken)
-                self.influxclient = InfluxDBClient(url="{}:{}".format(self.ifip, self.ifport),org=self.iforg, token=self.iftoken)
+                self.influxclient = InfluxDBClient(url=format_influx2_url(self.ifip, self.ifport),org=self.iforg, token=self.iftoken)
                 self.ifbucket_api = self.influxclient.buckets_api()
                 self.iforganization_api = self.influxclient.organizations_api()              
                 self.ifwrite_api = self.influxclient.write_api(write_options=SYNCHRONOUS)  
@@ -381,7 +521,7 @@ class Conf :
         if config.has_option("Generic","compat"): self.compat = config.getboolean("Generic","compat")
         if config.has_option("Generic","includeall"): self.includeall = config.getboolean("Generic","includeall")
         if config.has_option("Generic","invtype"): self.invtype = config.get("Generic","invtype")
-        if config.has_option("Generic","invtypemap"): self.invtypemap = eval(config.get("Generic","invtypemap"))
+        if config.has_option("Generic","invtypemap"): self.invtypemap = parse_mapping(config.get("Generic","invtypemap"), "Generic.invtypemap")
         if config.has_option("Generic","layout_strict"): self.layout_strict = config.getboolean("Generic","layout_strict")
         if config.has_option("Generic","layout_auto_family"): self.layout_auto_family = config.getboolean("Generic","layout_auto_family")
         if config.has_option("Generic","layout_min_score"): self.layout_min_score = config.getint("Generic","layout_min_score")
@@ -393,14 +533,14 @@ class Conf :
         if config.has_option("Generic","sendbuf"): self.sendbuf = config.get("Generic","sendbuf")
         if config.has_option("Generic","timezone"): self.tmzone = config.get("Generic","timezone")
         if config.has_option("Generic","mode"): self.mode = config.get("Generic","mode")
-        if config.has_option("Generic","ip"): self.grottip = config.get("Generic","ip")
-        if config.has_option("Generic","port"): self.grottport = config.getint("Generic","port")
-        if config.has_option("Generic","valueoffset"): self.valueoffset = config.get("Generic","valueoffset")
-        if config.has_option("Growatt","ip"): self.growattip = config.get("Growatt","ip") 
-        if config.has_option("Growatt","port"): self.growattport = config.getint("Growatt","port")
+        if config.has_option("Generic","ip"): self.grottip = parse_proxy_bind_host(config.get("Generic","ip"), "Generic.ip")
+        if config.has_option("Generic","port"): self.grottport = parse_int_setting(config.get("Generic","port"), "Generic.port", 0, 65535)
+        if config.has_option("Generic","valueoffset"): self.valueoffset = config.getint("Generic","valueoffset")
+        if config.has_option("Growatt","ip"): self.growattip = parse_host(config.get("Growatt","ip"), "Growatt.ip")
+        if config.has_option("Growatt","port"): self.growattport = parse_int_setting(config.get("Growatt","port"), "Growatt.port", 0, 65535)
         if config.has_option("MQTT","nomqtt"): self.nomqtt = config.get("MQTT","nomqtt")
-        if config.has_option("MQTT","ip"): self.mqttip = config.get("MQTT","ip")
-        if config.has_option("MQTT","port"): self.mqttport = config.getint("MQTT","port")
+        if config.has_option("MQTT","ip"): self.mqttip = parse_host(config.get("MQTT","ip"), "MQTT.ip")
+        if config.has_option("MQTT","port"): self.mqttport = parse_int_setting(config.get("MQTT","port"), "MQTT.port", 0, 65535)
         if config.has_option("MQTT","topic"): self.mqtttopic = config.get("MQTT","topic")
         if config.has_option("MQTT","mtopic"): self.mqttmtopic = config.get("MQTT","mtopic")
         if config.has_option("MQTT","mtopicname"): self.mqttmtopicname = config.get("MQTT","mtopicname")
@@ -426,8 +566,14 @@ class Conf :
         if config.has_option("influx","influx"): self.influx = config.get("influx","influx")
         if config.has_option("influx","influx2"): self.influx2 = config.get("influx","influx2")
         if config.has_option("influx","dbname"): self.ifdbname = config.get("influx","dbname")
-        if config.has_option("influx","ip"): self.ifip = config.get("influx","ip")
-        if config.has_option("influx","port"): self.ifport = int(config.get("influx","port"))
+        if config.has_option("influx","ip"):
+            self.ifip = config.get("influx","ip")
+            self._ifip_source = "influx.ip"
+            if os.getenv("ginflux2") is None and os.getenv("gifip") is None:
+                self.ifip = parse_influx_address(
+                    self.ifip, self._ifip_source, getattr(self, "influx2", False)
+                )
+        if config.has_option("influx","port"): self.ifport = parse_int_setting(config.get("influx","port"), "influx.port", 0, 65535)
         if config.has_option("influx","user"): self.ifuser = config.get("influx","user")
         if config.has_option("influx","password"): self.ifpsw = config.get("influx","password")
         if config.has_option("influx","org"): self.iforg = config.get("influx","org")
@@ -436,25 +582,25 @@ class Conf :
         #extensionINFLUX
         if config.has_option("extension","extension"): self.extension = config.get("extension","extension") 
         if config.has_option("extension","extname"): self.extname = config.get("extension","extname") 
-        if config.has_option("extension","extvar"): self.extvar = eval(config.get("extension","extvar"))
+        if config.has_option("extension","extvar"): self.extvar = parse_mapping(config.get("extension","extvar"), "extension.extvar")
 
     def getenv(self, envvar):
         envval = os.getenv(envvar)
 
-        if self.verbose: print(f"\n\tPulled '{envvar}={envval}' from the environment")
+        if self.verbose: print(f"\n\tEnvironment variable '{envvar}' supplied")
         return envval
 
     def procenv(self): 
         print("\nGrott process environmental variables")
         if os.getenv('gmode') in ("sniff", "proxy") :  self.mode = self.getenv('gmode')
         if os.getenv('gverbose') != None :  self.verbose = self.getenv('gverbose')
-        if os.getenv('gminrecl') != None : 
-            if 0 <= int(os.getenv('gminrecl')) <= 255  :     self.minrecl = self.getenv('gminrecl')
+        if os.getenv('gminrecl') != None :
+            self.minrecl = parse_int_setting(self.getenv('gminrecl'), "gminrecl", 0, 255)
         if os.getenv('gdecrypt') != None : self.decrypt = self.getenv('gdecrypt')
         if os.getenv('gcompat') != None :  self.compat = self.getenv('gcompat')
         if os.getenv('gincludeall') != None :  self.includeall = self.getenv('gincludeall')
         if os.getenv('ginvtype') != None :  self.invtype = self.getenv('ginvtype')
-        if os.getenv('ginvtypemap') != None :  self.invtypemap = eval(self.getenv('ginvtypemap'))
+        if os.getenv('ginvtypemap') != None :  self.invtypemap = parse_mapping(self.getenv('ginvtypemap'), "ginvtypemap")
         if os.getenv('glayoutstrict') != None : self.layout_strict = self.getenv('glayoutstrict')
         if os.getenv('glayoutautofamily') != None : self.layout_auto_family = self.getenv('glayoutautofamily')
         if os.getenv('glayoutminscore') != None : self.layout_min_score = int(self.getenv('glayoutminscore'))
@@ -465,38 +611,22 @@ class Conf :
         if os.getenv('gtimezone') != None : self.tmzone = self.getenv('gtimezone')
         if os.getenv('gsendbuf') != None : self.sendbuf = self.getenv('gsendbuf')
         if os.getenv('ginverterid') != None :  self.inverterid = self.getenv('ginverterid')
-        if os.getenv('ggrottip') != None : 
-            try: 
-                ipaddress.ip_address(os.getenv('ggrottip'))
-                self.grottip = self.getenv('ggrottip')
-            except: 
-                if self.verbose : print("\nGrott IP address env invalid")
-        if os.getenv('ggrottport') != None : 
-            if 0 <= int(os.getenv('ggrottport')) <= 65535  :  self.grottport = self.getenv('ggrottport')
-        if os.getenv('gvalueoffset') != None :     
-            if 0 <= int(os.getenv('gvalueoffset')) <= 255  :  self.valueoffset = self.getenv('gvalueoffset')
-        if os.getenv('ggrowattip') != None :    
-            try: 
-                ipaddress.ip_address(os.getenv('ggrowattip'))
-                self.growattip = self.getenv('ggrowattip')
-            except: 
-                if self.verbose : print("\nGrott Growatt server IP address env invalid")
-        if os.getenv('ggrowattport') != None :     
-            if 0 <= int(os.getenv('ggrowattport')) <= 65535  :  self.growattport = int(self.getenv('ggrowattport'))
-            else : 
-               if self.verbose : print("\nGrott Growatt server Port address env invalid")   
+        if os.getenv('ggrottip') != None :
+            self.grottip = parse_proxy_bind_host(self.getenv('ggrottip'), "ggrottip")
+        if os.getenv('ggrottport') != None :
+            self.grottport = parse_int_setting(self.getenv('ggrottport'), "ggrottport", 0, 65535)
+        if os.getenv('gvalueoffset') != None :
+            self.valueoffset = parse_int_setting(self.getenv('gvalueoffset'), "gvalueoffset", 0, 255)
+        if os.getenv('ggrowattip') != None :
+            self.growattip = parse_host(self.getenv('ggrowattip'), "ggrowattip")
+        if os.getenv('ggrowattport') != None :
+            self.growattport = parse_int_setting(self.getenv('ggrowattport'), "ggrowattport", 0, 65535)
         #handle mqtt environmentals    
         if os.getenv('gnomqtt') != None :  self.nomqtt = self.getenv('gnomqtt')
-        if os.getenv('gmqttip') != None :    
-            try: 
-                ipaddress.ip_address(os.getenv('gmqttip'))
-                self.mqttip = self.getenv('gmqttip')
-            except: 
-                if self.verbose : print("\nGrott MQTT server IP address env invalid")
-        if os.getenv('gmqttport') != None :     
-            if 0 <= int(os.getenv('gmqttport')) <= 65535  :  self.mqttport = int(self.getenv('gmqttport'))
-            else : 
-                if self.verbose : print("\nGrott MQTT server Port address env invalid")
+        if os.getenv('gmqttip') != None :
+            self.mqttip = parse_host(self.getenv('gmqttip'), "gmqttip")
+        if os.getenv('gmqttport') != None :
+            self.mqttport = parse_int_setting(self.getenv('gmqttport'), "gmqttport", 0, 65535)
         
         if os.getenv('gmqtttopic') != None :  self.mqtttopic = self.getenv('gmqtttopic')
         if os.getenv('gmqttinverterintopic') != None : self.mqttinverterintopic = self.getenv('gmqttinverterintopic')
@@ -522,25 +652,26 @@ class Conf :
         if os.getenv('ginflux') != None :  self.influx = self.getenv('ginflux')
         if os.getenv('ginflux2') != None :  self.influx2 = self.getenv('ginflux2')
         if os.getenv('gifdbname') != None :  self.ifdbname = self.getenv('gifdbname')
-        if os.getenv('gifip') != None :    
-            try: 
-                ipaddress.ip_address(os.getenv('gifip'))
-                self.ifip = self.getenv('gifip')
-            except: 
-                if self.verbose : print("\nGrott InfluxDB server IP address env invalid")
-        if os.getenv('gifport') != None :     
-            if 0 <= int(os.getenv('gifport')) <= 65535  :  self.ifport = int(self.getenv('gifport'))
-            else : 
-                if self.verbose : print("\nGrott InfluxDB server Port address env invalid")      
+        if os.getenv('gifip') != None :
+            self.ifip = self.getenv('gifip')
+            self._ifip_source = "gifip"
+        if os.getenv('gifport') != None :
+            self.ifport = parse_int_setting(self.getenv('gifport'), "gifport", 0, 65535)
         if os.getenv('gifuser') != None :  self.ifuser = self.getenv('gifuser')
         if os.getenv('gifpassword') != None :  self.ifpsw = self.getenv('gifpassword')
         if os.getenv('giforg') != None :  self.iforg = self.getenv('giforg')
         if os.getenv('gifbucket') != None :  self.ifbucket = self.getenv('gifbucket')
         if os.getenv('giftoken') != None :  self.iftoken = self.getenv('giftoken')
+        if hasattr(self, "ifip"):
+            self.ifip = parse_influx_address(
+                self.ifip,
+                getattr(self, "_ifip_source", "influx.ip"),
+                getattr(self, "influx2", False),
+            )
         #Handle Extension
         if os.getenv('gextension') != None :  self.extension = self.getenv('gextension')
         if os.getenv('gextname') != None :  self.extname = self.getenv('gextname')
-        if os.getenv('gextvar') != None :  self.extvar = eval(self.getenv('gextvar'))
+        if os.getenv('gextvar') != None :  self.extvar = parse_mapping(self.getenv('gextvar'), "gextvar")
         
     def set_recwl(self):    
         #define record that will not be blocked or inspected if blockcmd is specified

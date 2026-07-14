@@ -2,3 +2,29 @@
 .venv*/
 __pycache__/
 *.pyc
+
+# Private local engineering journals and deployment evidence.
+/docs/aegis/
+
+# Local runtime configuration and environment files.
+**/grott.ini
+!/examples/grott.ini
+**/.env
+**/.env.*
+!/.env.example
+
+# Captures, logs, private keys, and common credential exports.
+*.pcap
+*.pcapng
+*.cap
+*.log
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+credentials*.json
+secrets*.yaml
+secrets*.yml
+*.secret
+*.credentials

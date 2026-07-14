@@ -1,8 +1,17 @@
 services:
   grott:
-    image: ghcr.io/herbertmt978/grott:0.1.9-beta
+    image: ghcr.io/herbertmt978/grott:0.1.10-beta
     container_name: grott
     restart: unless-stopped
+    init: true
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "5279:5279"
     volumes:

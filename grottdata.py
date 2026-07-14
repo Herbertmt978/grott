@@ -33,6 +33,20 @@ SENSITIVE_KEY_MARKERS = (
 )
 
 
+class InfluxSinkError(RuntimeError):
+    """An optional InfluxDB sink rejected a telemetry write."""
+
+
+def write_influx_points(conf, points):
+    """Write one InfluxDB batch while hiding backend exception details."""
+    try:
+        if conf.influx2:
+            return conf.ifwrite_api.write(conf.ifbucket, conf.iforg, points)
+        return conf.influxclient.write_points(points)
+    except Exception:
+        raise InfluxSinkError("InfluxDB telemetry write failed") from None
+
+
 def redact_sensitive(value):
     if isinstance(value, dict):
         redacted = {}
@@ -233,39 +247,10 @@ def procdata(conf,data):
     definedkey = {}
 
 
-    if conf.compat is False: 
-        # new method if compat = False (automatic detection):  
-       
-        if (conf.invtype == "default") :
-            # Handle systems with mixed invtype
-            if (ndata > 50) and not is_smart_meter:
-                # There is enough data for an inverter serial number
-                inverterType = "default"
+    if conf.compat is False:
+        # new method if compat = False (automatic detection):
 
-                inverterSerial = None
-                try:
-                    inverterSerial = codecs.decode(result_string[76:96], "hex").decode('ASCII')
-                    if conf.verbose:
-                        print("\t - Possible Inverter serial", inverterSerial)
-                except UnicodeDecodeError:
-                    # In case of problem (eg: new record type with different serial placement)
-                    pass
-
-                if inverterSerial:
-                    # Lookup inverter type based on inverter serial
-                    try:
-                        inverterType = conf.invtypemap[inverterSerial]
-                        print("\t - Matched inverter serial to inverter type", inverterType)
-                    except:
-                        inverterType = "default"
-                        print("\t - Inverter serial not recognised - using inverter type", inverterType)
-
-                if (inverterType != "default") :
-                    layout = layout + inverterType.upper()
-                    # Update the conf.layout like done earlier
-                    conf.layout = layout
-
-        if conf.verbose: 
+        if conf.verbose:
            print("\t - " + 'Growatt new layout processing')
            print("\t\t - " + "decrypt       : ",conf.decrypt)
            print("\t\t - " + "offset        : ", conf.offset)
@@ -712,20 +697,16 @@ def procdata(conf,data):
         print(format_multi_line("\t\t\t ", str(ifjson)))   
         #if conf.verbose :  print("\t - " + "Grott InfluxDB publihing started")
   
-        try: 
-            if (conf.influx2):
-                if conf.verbose :  print("\t - " + "Grott write to influxdb v2") 
-                ifresult = conf.ifwrite_api.write(conf.ifbucket,conf.iforg,ifjson)   
-                #print(ifresult)
-            else: 
-                if conf.verbose :  print("\t - " + "Grott write to influxdb v1") 
-                ifresult = conf.influxclient.write_points(ifjson)
-        #except : 
-        except Exception as e:
-            # if  conf.verbose: 
-                print("\t - " + "Grott InfluxDB error ")
-                print(e) 
-                raise SystemExit("Grott Influxdb write error, grott will be stopped") 
+        try:
+            if conf.verbose:
+                version = "v2" if conf.influx2 else "v1"
+                print("\t - Grott write to influxdb", version)
+            write_influx_points(conf, ifjson)
+        except InfluxSinkError as error:
+            print(
+                "\t - Grott optional InfluxDB sink failed; "
+                f"processing continues ({type(error).__name__})"
+            )
             
     else: 
             if conf.verbose : print("\t - " + "Grott Send data to Influx disabled ")      

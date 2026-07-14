@@ -8,18 +8,24 @@ This fork keeps the upstream history intact. It exists because the problem in up
 
 ## Current Status
 
-The current beta release is [`v0.1.9-beta`](https://github.com/Herbertmt978/grott/releases/tag/v0.1.9-beta).
+The current release candidate is `v0.1.10-beta`. Read its [human-written release notes](docs/releases/v0.1.10-beta.md) for the problems fixed and the user benefits. It remains experimental and must complete the gates in [RELEASING.md](RELEASING.md) before appearing on the generic [Releases page](https://github.com/Herbertmt978/grott/releases). That Releases page is the availability authority: if `v0.1.10-beta` is not listed there, its public image tags do not exist yet and the commands below are preparation examples only.
+
+| Version domain | Version | Meaning |
+| --- | --- | --- |
+| Fork/add-on release | `0.1.10-beta` | The Docker image, Home Assistant add-on metadata, and release tag prepared by this fork. |
+| Bundled Grott core (upstream startup version) | `2.8.3` | The version printed by the inherited Grott entry point; fork fixes are carried on top of that core. |
+| Bundled Home Assistant extension | `0.0.7-rc2` | The in-repository `grott_ha.py` extension used for MQTT discovery and state. |
 
 This is beta software. It has been tested with a real ShineWiFi/SPH Home Assistant setup and with sanitized layout fixtures for generic, SPH, SPA, TL3, and MIN-style packets. Growatt has many inverter and datalogger combinations, so please treat new hardware combinations as testing until the values have been compared with ShinePhone.
 
-Prebuilt images are published to GHCR for:
+Previously published beta images are available on GHCR. The `0.1.10-beta` candidate is prepared for the same platform set, but its images must not be published until the release gates pass:
 
 - `amd64`
 - `aarch64`
 - `armv7`
 - `i386`
 
-The upstream project does not currently have a repository-level license. This fork preserves attribution and does not add a license to inherited upstream code. See [docs/LEGAL.md](docs/LEGAL.md) and the upstream license discussion in [johanmeijer/grott#512](https://github.com/johanmeijer/grott/issues/512).
+The upstream project does not currently have a repository-level license. This fork preserves attribution and does not add a license to inherited upstream code. **No public redistribution release may be made until the upstream maintainer supplies an explicit licence or written redistribution permission.** See [docs/LEGAL.md](docs/LEGAL.md), the release gates in [RELEASING.md](RELEASING.md), and the upstream discussion in [johanmeijer/grott#512](https://github.com/johanmeijer/grott/issues/512).
 
 ## What Changed In This Fork
 
@@ -31,6 +37,9 @@ The upstream project does not currently have a repository-level license. This fo
 - Cleaner entity names and unique IDs for Home Assistant.
 - A dry-run-first helper for clearing stale retained MQTT discovery topics.
 - Tests and sanitized packet fixtures for the layouts this fork currently knows about.
+- Frame-aware proxy handling for TCP records that arrive split or coalesced, with slow connection attempts isolated from healthy sessions.
+- Safe configuration mapping parsing, redacted environment diagnostics, and validation of the final effective settings.
+- Source-identical, hash-locked Docker/add-on builds with non-root execution, read-only-filesystem support, passive health checks, and four-platform validation.
 
 ## How It Works
 
@@ -44,7 +53,7 @@ Growatt datalogger -> Grott -> Growatt servers
 
 In proxy mode, your ShinePhone app can continue to work because Grott forwards the packets to Growatt after reading them. Grott listens on TCP port `5279` by default.
 
-Sniff mode still exists upstream, but it is harder to run safely because it needs packet routing and elevated network permissions. For Home Assistant and Docker installs, use proxy mode unless you already know you need sniffing.
+Sniff mode still exists upstream, but it needs packet routing and elevated network permissions. The v0.1.10-beta images and supplied Compose profile are qualified for proxy mode only. If an existing installation uses `server` or `sniff`, keep that installation in place; this beta does not provide a supported packaged migration for those modes.
 
 ## Before You Start
 
@@ -93,6 +102,8 @@ This is the easiest install if Grott will run on the same Home Assistant machine
 
    These defaults assume the official Mosquitto broker add-on and the official MQTT integration with discovery enabled.
 
+   The Home Assistant add-on supports proxy mode only. When `ha_plugin` is enabled, the bundled Home Assistant extension is the MQTT publisher and Grott's separate native MQTT publisher is disabled to avoid duplicate publishing paths.
+
 5. If your MQTT broker requires authentication, set `mqtt_user` and `mqtt_password`.
 6. Start the add-on.
 7. Point your Growatt datalogger at your Home Assistant IP address on port `5279`.
@@ -110,21 +121,39 @@ Leave `layout_strict` as `false` unless you intentionally want old Grott behavio
 
 Use this if Grott will run on a separate Linux server, NAS, or VM.
 
+**Availability check:** do not run the candidate configuration below until `v0.1.10-beta` appears on this repository's Releases page. The hardened settings are qualified with the matching `0.1.10-beta` image and should not be assumed to work unchanged with an older image.
+
 Create `docker-compose.yml`:
 
 ```yaml
 services:
   grott:
-    image: ghcr.io/herbertmt978/grott:0.1.9-beta
+    image: ghcr.io/herbertmt978/grott:0.1.10-beta
     container_name: grott
     restart: unless-stopped
+    init: true
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "5279:5279"
     volumes:
       - ./grott.ini:/app/grott.ini:ro
-      - ./grott.ini:/app/config/grott.ini:ro
     environment:
-      TZ: Europe/London
+      - TZ=Europe/London
+      - gmode=proxy
+      - gblockcmd=True
+      - gtime=server
+      - gsendbuf=False
+      - ginvtype=default
+      - glayoutstrict=False
+      - glayoutautofamily=True
+      - gnomqtt=True
 ```
 
 Create `grott.ini`:
@@ -150,6 +179,10 @@ extvar = {"ha_mqtt_host": "MQTT_HOST", "ha_mqtt_port": 1883, "ha_mqtt_user": "MQ
 ```
 
 Replace `MQTT_HOST`, `MQTT_USER`, and `MQTT_PASSWORD` with your broker details. If your broker does not require authentication, omit the user and password values from `extvar`.
+
+The maintained image runs as UID/GID `10001:10001`. On a Linux Docker host, the bind-mounted `grott.ini` must be readable by UID `10001`; a restrictive example is `sudo chown 10001:10001 grott.ini && sudo chmod 0600 grott.ini`. Do not make a secret-bearing configuration file world-readable just to satisfy the container.
+
+The Compose profile keeps the image root filesystem read-only. If you intentionally use Grott's optional file output (`-o`) or a file-writing extension, first prefer a dedicated writable bind mount and point output into that mount. If the output path cannot be redirected, `read_only: false` is the explicit escape hatch; document the reason, keep capabilities dropped, and restore the read-only setting when the file output is retired.
 
 For SPH or ShineWiFi setups affected by [#697](https://github.com/johanmeijer/grott/issues/697), use:
 
@@ -186,7 +219,7 @@ If you are chasing new short mystery packets such as `0119` or `0118`, temporari
 diagnostic_logging = True
 ```
 
-under `[Generic]`, restart Grott, reproduce the problem, and then send the extra `Short packet raw data:` lines as well. Leave it disabled in normal use because those packet dumps can get noisy.
+under `[Generic]`, restart Grott, and reproduce the problem. Treat every `Short packet raw data:` line as potentially identifying device data: never paste it into a public issue unchanged. Replace stable serial/device identifiers with consistent dummy bytes and say what was redacted, or omit the raw line and ask for a private support route. Leave diagnostic logging disabled in normal use because the dumps can also get noisy.
 
 Home Assistant measurement sensors such as `pvpowerout` are published without `expire_after`, so they keep their last value if the inverter stops sending fresh overnight telemetry. Use the `grott_last_push` sensor as the freshness indicator instead.
 
@@ -284,8 +317,10 @@ Back up your existing `grott.ini` or Home Assistant add-on options first.
 For Docker, change only the image first:
 
 ```yaml
-    image: ghcr.io/herbertmt978/grott:0.1.9-beta
+    image: ghcr.io/herbertmt978/grott:0.1.10-beta
 ```
+
+Only make that change after the candidate appears on the Releases page; before then the public tag is unavailable.
 
 Then make sure your config includes the proxy settings:
 
@@ -332,7 +367,7 @@ If you need logs for a support issue:
 - Home Assistant add-on users should open **Settings -> Add-ons -> Grott HA Docker -> Log**, restart the add-on, and copy the startup lines plus the packet-flow lines around the failure.
 - Docker users should restart the container and run `docker logs --since 15m grott` or `docker compose logs --since=15m grott`.
 - If the issue involves short forwarded-only packets, temporarily enable `diagnostic_logging = True` in `[Generic]` first.
-- Please include the active publish-path summary, blocked-record lines, short-record lines, any `Short packet raw data:` lines, the selected layout, and `grottext.ha` publish lines.
+- Please include the active publish-path summary, blocked-record lines, short-record lines, the selected layout, and `grottext.ha` publish lines. Include `Short packet raw data:` only after pseudonymising stable serial/device identifiers; never post raw packet hex unchanged.
 
 If Grott receives no packets:
 
@@ -356,11 +391,15 @@ If ShinePhone stops updating:
 
 ## Rollback
 
-For Docker, change the image back to your previous tag, for example:
+Back up the active `grott.ini` before a Docker update. Before any Home Assistant UAT, create a full Home Assistant backup named **Grott pre-update rollback**, wait for it to report completed, verify it is visible in the backup list and contains the Grott add-on/configuration, and retain its backup ID. Without that verified backup, UAT must not begin. Also record which process owns TCP port `5279`; only one Grott service or forwarder may listen there during rollback.
+
+For Docker, the verified previous fork image is `0.1.9-beta`. Pinning its immutable four-platform manifest is the most exact rollback:
 
 ```yaml
-image: ledidobe/grott:2.8.3_240731
+image: ghcr.io/herbertmt978/grott@sha256:e9314693651e0cce82c603b53f88c66ae4757d93e09b97a24c56070c845d2351
 ```
+
+The equivalent readable tag is `ghcr.io/herbertmt978/grott:0.1.9-beta`; both `0.1.9-beta` and `v0.1.9-beta` were verified to resolve to that manifest on 2026-07-13.
 
 Then restart:
 
@@ -368,7 +407,11 @@ Then restart:
 docker compose up -d
 ```
 
-For Home Assistant, stop this add-on and reinstall the add-on repository you used before.
+For Home Assistant, the only supported rollback is the verified **Grott pre-update rollback** backup: stop the candidate, restore that named full backup by its recorded ID, and confirm the restored add-on options before starting anything. Start exactly one Grott listener or forwarder on TCP `5279`.
+
+For evidence, the previous `0.1.9-beta` add-on manifest was independently verified as `ghcr.io/herbertmt978/grott-ha-docker@sha256:7c55c161195eccd5d93bd22576bee2ea2958f68a380087eb6694d103bcfafbb1`; the digest does not make historical add-on installation from the current repository a supported rollback mechanism.
+
+After either rollback, wait for a fresh packet, confirm `grott_last_push` advances, compare several power and energy values with ShinePhone, and confirm ShinePhone itself still receives new data through the proxy path.
 
 The datalogger can stay pointed at the same host and port if the replacement Grott service is listening on TCP `5279`. Otherwise, change the datalogger server setting back to your previous target.
 
@@ -384,7 +427,7 @@ Please include:
 - sanitized verbose Grott packet output
 - the ShinePhone values shown at roughly the same time
 
-Do not post MQTT passwords, Growatt account credentials, API keys, or full unsanitized network captures.
+Do not post MQTT passwords, Growatt account credentials, API keys, full unsanitized network captures, unchanged packet hex, or stable device identifiers.
 
 ## Upstream Grott
 

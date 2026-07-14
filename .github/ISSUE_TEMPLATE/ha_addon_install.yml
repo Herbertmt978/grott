@@ -9,14 +9,14 @@ body:
     id: addon_version
     attributes:
       label: Add-on version
-      placeholder: 0.1.6-beta
+      placeholder: Copy the exact version shown on the add-on Info tab
     validations:
       required: true
   - type: input
     id: ha_version
     attributes:
       label: Home Assistant version
-      placeholder: 2026.4.x
+      placeholder: Copy the exact version shown in Settings > About
   - type: dropdown
     id: architecture
     attributes:

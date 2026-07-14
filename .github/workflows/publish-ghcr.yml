@@ -1,95 +1,944 @@
 name: Publish GHCR Images
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       tag:
-        description: "Git tag to publish, for example v0.1.1-beta"
+        description: "Existing protected release tag to publish"
         required: true
+        type: string
 
-permissions:
-  contents: read
-  packages: write
+permissions: {}
+
+concurrency:
+  group: publish-ghcr-${{ inputs.tag }}
+  cancel-in-progress: false
 
 env:
   RUNTIME_IMAGE: ghcr.io/herbertmt978/grott
   ADDON_IMAGE: ghcr.io/herbertmt978/grott-ha-docker
 
 jobs:
-  publish:
+  validate:
+    if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.ref_protected }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.release_input.outputs.tag }}
+      version: ${{ steps.release_input.outputs.version }}
+      source_sha: ${{ steps.source.outputs.sha }}
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
-
-      - name: Resolve release version
-        id: release
+      - name: Validate requested release tag
+        id: release_input
         shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            tag="${{ inputs.tag }}"
-          else
-            tag="${GITHUB_REF_NAME}"
+          set -euo pipefail
+          tag_pattern='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          if [[ ! "${REQUESTED_TAG}" =~ ${tag_pattern} ]]; then
+            echo "ERROR: release tag must match vX.Y.Z[-prerelease] without build metadata" >&2
+            exit 1
           fi
-          version="${tag#v}"
-          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          if [[ "${REQUESTED_TAG}" == *-* ]]; then
+            prerelease="${REQUESTED_TAG#*-}"
+            IFS='.' read -r -a identifiers <<< "${prerelease}"
+            for identifier in "${identifiers[@]}"; do
+              if [[ "${identifier}" =~ ^[0-9]+$ && "${identifier}" != "0" && "${identifier}" == 0* ]]; then
+                echo "ERROR: numeric prerelease identifiers must not have leading zeroes" >&2
+                exit 1
+              fi
+            done
+          fi
+          printf 'tag=%s\n' "${REQUESTED_TAG}" >> "${GITHUB_OUTPUT}"
+          printf 'version=%s\n' "${REQUESTED_TAG#v}" >> "${GITHUB_OUTPUT}"
+
+      - name: Preserve protected workflow dispatch SHA
+        id: dispatch_source
+        shell: bash
+        env:
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${DISPATCH_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: protected workflow dispatch SHA is missing or invalid" >&2
+            exit 1
+          fi
+          printf 'sha=%s\n' "${DISPATCH_SHA}" >> "${GITHUB_OUTPUT}"
+
+      - name: Check out the validated tag
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ steps.release_input.outputs.tag }}
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Verify checked-out tag and source commit
+        id: source
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release_input.outputs.tag }}
+          DISPATCH_SHA: ${{ steps.dispatch_source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git show-ref --verify --quiet "refs/tags/${RELEASE_TAG}" || {
+            echo "ERROR: the validated release tag was not fetched" >&2
+            exit 1
+          }
+          tag_type="$(git cat-file -t "refs/tags/${RELEASE_TAG}")"
+          if [[ "${tag_type}" != "tag" ]]; then
+            echo "ERROR: release tag must be an annotated tag object" >&2
+            exit 1
+          fi
+          head_sha="$(git rev-parse HEAD)"
+          tag_sha="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+          if [[ "${head_sha}" != "${tag_sha}" ]]; then
+            echo "ERROR: checkout HEAD does not match the release tag commit" >&2
+            exit 1
+          fi
+          if [[ "${tag_sha}" != "${DISPATCH_SHA}" ]]; then
+            echo "ERROR: release tag commit does not equal the protected workflow dispatch SHA" >&2
+            exit 1
+          fi
+          printf 'sha=%s\n' "${DISPATCH_SHA}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m pip check
+
+      - name: Audit locked runtime dependencies
+        run: pip-audit --require-hashes -r requirements.lock
+
+      - name: Validate Home Assistant add-on repository
+        run: python tools/validate_ha_addon_repo.py
+
+      - name: Validate release invariants and version
+        env:
+          RELEASE_TAG: ${{ steps.release_input.outputs.tag }}
+        run: python tools/validate_release.py --check-worktree --tag "${RELEASE_TAG}"
+
+      - name: Run high-signal Ruff checks
+        run: ruff check --select E9,F63,F7,F82 .
+
+      - name: Compile maintained Python sources
+        run: python -m compileall -q grott*.py grottext tools "examples/Home Assistent/grott_ha.py"
+
+      - name: Run tests
+        run: pytest tests "examples/Home Assistent/test_grott_ha.py" -q
+
+  gate:
+    if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.ref_protected }}
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Check out validated source SHA for release gate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.11"
+
+      - name: Verify public release controls
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          gate_dir="$(mktemp -d)"
+          trap 'rm -rf "${gate_dir}"' EXIT
+          api_version="2026-03-10"
+          gate_tool_sha256="586a844ab4677ca80dca351831bce23483fd7bafa776cf86ef876bcc6cae7ab0"
+          printf '%s  %s\n' "${gate_tool_sha256}" \
+            tools/verify_release_controls.py | sha256sum --check --strict
+          encoded_branch="$(python -c \
+            'from urllib.parse import quote; import sys; print(quote(sys.argv[1], safe=""))' \
+            "${DEFAULT_BRANCH}")"
+
+          github_api() {
+            gh api -H "X-GitHub-Api-Version: ${api_version}" "$@"
+          }
+
+          github_api "repos/${GITHUB_REPOSITORY}" > "${gate_dir}/repository.json"
+          github_api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${encoded_branch}" \
+            > "${gate_dir}/default-ref.json"
+          github_api --method GET \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+            -f branch="${DEFAULT_BRANCH}" -f head_sha="${SOURCE_SHA}" \
+            -f status=completed -f per_page=100 > "${gate_dir}/ci-runs.json"
+          github_api --paginate --slurp --method GET \
+            "repos/${GITHUB_REPOSITORY}/rules/branches/${encoded_branch}" \
+            -f per_page=100 > "${gate_dir}/branch-rules.json"
+          github_api "repos/${GITHUB_REPOSITORY}/environments/release" \
+            > "${gate_dir}/environment.json"
+          github_api --paginate --slurp --method GET \
+            "repos/${GITHUB_REPOSITORY}/rulesets" \
+            -f includes_parents=true -f targets=tag -f per_page=100 \
+            > "${gate_dir}/tag-rulesets.json"
+
+          python tools/verify_release_controls.py list-ruleset-ids \
+            --input "${gate_dir}/tag-rulesets.json" \
+            > "${gate_dir}/tag-ruleset-ids"
+
+          while IFS= read -r ruleset_id; do
+            ruleset_id="${ruleset_id%$'\r'}"
+            [[ "${ruleset_id}" =~ ^[1-9][0-9]*$ ]] || {
+              echo "ERROR: tag ruleset id is invalid" >&2
+              exit 1
+            }
+            github_api "repos/${GITHUB_REPOSITORY}/rulesets/${ruleset_id}" \
+              > "${gate_dir}/tag-ruleset-${ruleset_id}.json"
+          done < "${gate_dir}/tag-ruleset-ids"
+
+          python tools/verify_release_controls.py verify \
+            --evidence-dir "${gate_dir}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --default-branch "${DEFAULT_BRANCH}" \
+            --release-tag "${RELEASE_TAG}" \
+            --source-sha "${SOURCE_SHA}"
+
+  publish:
+    if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.ref_protected }}
+    needs: [validate, gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ needs.validate.outputs.tag }}
+      version: ${{ needs.validate.outputs.version }}
+      source_sha: ${{ needs.validate.outputs.source_sha }}
+      runtime_digest: ${{ steps.runtime_build.outputs.digest }}
+      addon_digest: ${{ steps.addon_build.outputs.digest }}
+
+    steps:
+      - name: Check out validated source SHA
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+          persist-credentials: false
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        with:
+          buildkitd-config-inline: |
+            [worker.oci]
+              max-parallelism = 1
+
+      - name: Revalidate remote tag before package login
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VALIDATED_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          REMOTE_URL: ${{ github.server_url }}/${{ github.repository }}.git
+        run: |
+          set -euo pipefail
+          get_repository_state() {
+            gh api -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/${GITHUB_REPOSITORY}" \
+              --jq '[.full_name, .default_branch] | @tsv'
+          }
+          repository_state="$(get_repository_state)"
+          live_repository=""
+          live_default_branch=""
+          extra=""
+          IFS=$'\t' read -r live_repository live_default_branch extra \
+            <<< "${repository_state}"
+          if [[ -z "${live_repository}" || -z "${live_default_branch}" || -n "${extra:-}" || "${repository_state}" == *$'\n'* || "${live_repository,,}" != "${GITHUB_REPOSITORY,,}" || "${live_default_branch}" != "${VALIDATED_DEFAULT_BRANCH}" ]]; then
+            echo "ERROR: live repository identity or default branch is invalid" >&2
+            exit 1
+          fi
+          if ! git check-ref-format "refs/heads/${live_default_branch}" >/dev/null; then
+            echo "ERROR: live default branch is not a valid Git branch ref" >&2
+            exit 1
+          fi
+          branch_ref="refs/heads/${live_default_branch}"
+          branch_refs="$(git ls-remote --exit-code "${REMOTE_URL}" "${branch_ref}")"
+          branch_sha=""
+          branch_count=0
+          branch_unexpected=false
+          while IFS=$'\t' read -r ref_sha ref_name extra; do
+            if [[ -z "${ref_sha}" && -z "${ref_name}" ]]; then
+              continue
+            fi
+            if [[ ! "${ref_sha}" =~ ^[0-9a-f]{40}$ || "${ref_name}" != "${branch_ref}" || -n "${extra:-}" ]]; then
+              branch_unexpected=true
+              continue
+            fi
+            branch_count=$((branch_count + 1))
+            branch_sha="${ref_sha}"
+          done <<< "${branch_refs}"
+          if [[ "${branch_count}" -ne 1 || "${branch_unexpected}" == "true" || "${branch_sha}" != "${SOURCE_SHA}" ]]; then
+            echo "ERROR: protected default branch no longer resolves exactly to verified source SHA" >&2
+            exit 1
+          fi
+          direct_ref="refs/tags/${RELEASE_TAG}"
+          peeled_ref="refs/tags/${RELEASE_TAG}^{}"
+          remote_refs="$(git ls-remote --exit-code "${REMOTE_URL}" "${direct_ref}" "${peeled_ref}")"
+          direct_sha=""
+          peeled_sha=""
+          direct_count=0
+          peeled_count=0
+          unexpected_ref=false
+          while IFS=$'\t' read -r ref_sha ref_name extra; do
+            if [[ -z "${ref_sha}" && -z "${ref_name}" ]]; then
+              continue
+            fi
+            if [[ ! "${ref_sha}" =~ ^[0-9a-f]{40}$ || -z "${ref_name}" || -n "${extra:-}" ]]; then
+              unexpected_ref=true
+              continue
+            fi
+            case "${ref_name}" in
+              "${direct_ref}")
+                direct_count=$((direct_count + 1))
+                direct_sha="${ref_sha}"
+                ;;
+              "${peeled_ref}")
+                peeled_count=$((peeled_count + 1))
+                peeled_sha="${ref_sha}"
+                ;;
+              *)
+                unexpected_ref=true
+                ;;
+            esac
+          done <<< "${remote_refs}"
+          if [[ "${direct_count}" -ne 1 || "${peeled_count}" -ne 1 || "${unexpected_ref}" == "true" ]]; then
+            echo "ERROR: remote release tag must return exactly one direct tag-object ref and one peeled ref" >&2
+            exit 1
+          fi
+          if [[ "${direct_sha}" == "${peeled_sha}" ]]; then
+            echo "ERROR: remote release tag must be annotated with a distinct tag-object SHA" >&2
+            exit 1
+          fi
+          if [[ "${peeled_sha}" != "${SOURCE_SHA}" ]]; then
+            echo "ERROR: remote release tag peeled SHA must equal the verified source SHA" >&2
+            exit 1
+          fi
+          repository_state_after="$(get_repository_state)"
+          if [[ "${repository_state_after}" != "${repository_state}" ]]; then
+            echo "ERROR: live repository identity or default branch changed during revalidation" >&2
+            exit 1
+          fi
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Runtime image metadata
-        id: runtime_meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.RUNTIME_IMAGE }}
-          tags: |
-            type=raw,value=${{ steps.release.outputs.tag }}
-            type=raw,value=${{ steps.release.outputs.version }}
-
-      - name: Build and publish runtime image
-        uses: docker/build-push-action@v7
+      - name: Build and stage runtime candidate
+        id: runtime_build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: docker/dockerfile
           platforms: linux/amd64,linux/arm64,linux/arm/v7,linux/386
           push: true
-          tags: ${{ steps.runtime_meta.outputs.tags }}
-          labels: ${{ steps.runtime_meta.outputs.labels }}
+          sbom: true
+          provenance: mode=max
+          build-args: |
+            BUILD_VERSION=${{ needs.validate.outputs.version }}
+            VCS_REF=${{ needs.validate.outputs.source_sha }}
+          tags: ${{ env.RUNTIME_IMAGE }}:candidate-${{ needs.validate.outputs.source_sha }}
+          labels: org.opencontainers.image.revision=${{ needs.validate.outputs.source_sha }}
 
-      - name: Home Assistant add-on image metadata
-        id: addon_meta
-        uses: docker/metadata-action@v6
+      - name: Build and stage Home Assistant add-on candidate
+        id: addon_build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
-          images: ${{ env.ADDON_IMAGE }}
-          tags: |
-            type=raw,value=${{ steps.release.outputs.version }}
-            type=raw,value=${{ steps.release.outputs.tag }}
-
-      - name: Build and publish Home Assistant add-on image
-        uses: docker/build-push-action@v7
-        with:
-          context: ./addons/grott
+          context: .
+          file: addons/grott/Dockerfile
           platforms: linux/amd64,linux/arm64,linux/arm/v7,linux/386
           push: true
+          sbom: true
+          provenance: mode=max
           build-args: |
-            BUILD_VERSION=${{ steps.release.outputs.version }}
-            GROTT_REF=${{ steps.release.outputs.tag }}
-          tags: ${{ steps.addon_meta.outputs.tags }}
-          labels: ${{ steps.addon_meta.outputs.labels }}
+            BUILD_VERSION=${{ needs.validate.outputs.version }}
+            VCS_REF=${{ needs.validate.outputs.source_sha }}
+          tags: ${{ env.ADDON_IMAGE }}:candidate-${{ needs.validate.outputs.source_sha }}
+          labels: org.opencontainers.image.revision=${{ needs.validate.outputs.source_sha }}
+
+      - name: Verify candidate manifests by digest
+        shell: bash
+        env:
+          RUNTIME_DIGEST: ${{ steps.runtime_build.outputs.digest }}
+          ADDON_DIGEST: ${{ steps.addon_build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          expected="$(printf '%s\n' linux/amd64 linux/arm64 linux/arm/v7 linux/386 | sort)"
+          for image_ref in "${RUNTIME_IMAGE}@${RUNTIME_DIGEST}" "${ADDON_IMAGE}@${ADDON_DIGEST}"; do
+            if [[ ! "${image_ref}" =~ @sha256:[0-9a-f]{64}$ ]]; then
+              echo "ERROR: build action did not return a valid manifest digest" >&2
+              exit 1
+            fi
+            manifest_file="$(mktemp)"
+            docker buildx imagetools inspect "${image_ref}" --raw > "${manifest_file}"
+            actual="$(jq -r '.manifests[].platform | select(.os != "unknown") | .os + "/" + .architecture + (if .variant then "/" + .variant else "" end)' "${manifest_file}" | sort)"
+            rm -f "${manifest_file}"
+            if [[ "${actual}" != "${expected}" ]]; then
+              echo "ERROR: candidate digest does not contain the four advertised platforms" >&2
+              exit 1
+            fi
+          done
+
+      - name: Validate and scan every staged candidate platform
+        shell: bash
+        env:
+          RUNTIME_DIGEST: ${{ steps.runtime_build.outputs.digest }}
+          ADDON_DIGEST: ${{ steps.addon_build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          readonly trivy_image='aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f'
+          readonly -a platforms=(linux/amd64 linux/arm64 linux/arm/v7 linux/386)
+          validate_and_scan() {
+            local image="$1"
+            local manifest_digest="$2"
+            local manifest_ref
+            local manifest_json
+            local platform
+            local os
+            local architecture
+            local variant
+            local platform_digest
+            local platform_ref
+            if [[ ! "${manifest_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "ERROR: candidate validation requires an immutable manifest digest" >&2
+              exit 1
+            fi
+            manifest_ref="${image}@${manifest_digest}"
+            manifest_json="$(docker buildx imagetools inspect "${manifest_ref}" --raw)"
+            for platform in "${platforms[@]}"; do
+              IFS='/' read -r os architecture variant <<< "${platform}"
+              platform_digest="$(
+                jq -er \
+                  --arg os "${os}" \
+                  --arg architecture "${architecture}" \
+                  --arg variant "${variant:-}" \
+                  '[.manifests[]
+                    | select(.platform.os == $os)
+                    | select(.platform.architecture == $architecture)
+                    | select((.platform.variant // "") == $variant)
+                    | .digest]
+                   | if length == 1 then .[0]
+                     else error("expected exactly one matching platform manifest")
+                     end' <<< "${manifest_json}"
+              )"
+              if [[ ! "${platform_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+                echo "ERROR: ${manifest_ref} returned an invalid digest for ${platform}" >&2
+                exit 1
+              fi
+              platform_ref="${image}@${platform_digest}"
+              docker pull --platform "${platform}" "${platform_ref}"
+              docker run --rm --pull never --network none --platform "${platform}" \
+                --read-only --tmpfs /tmp --cap-drop ALL \
+                --security-opt no-new-privileges:true --user 10001:10001 \
+                --entrypoint python "${platform_ref}" \
+                /usr/local/bin/validate_container_artifact.py
+              docker run --rm \
+                --read-only --tmpfs /tmp --cap-drop ALL \
+                --security-opt no-new-privileges:true \
+                --volume /var/run/docker.sock:/var/run/docker.sock \
+                --volume grott-release-trivy-cache:/root/.cache/ \
+                "${trivy_image}" image --image-src docker \
+                --platform "${platform}" --scanners vuln,secret \
+                --severity HIGH,CRITICAL --exit-code 1 --no-progress \
+                "${platform_ref}"
+            done
+          }
+          validate_and_scan "${RUNTIME_IMAGE}" "${RUNTIME_DIGEST}"
+          validate_and_scan "${ADDON_IMAGE}" "${ADDON_DIGEST}"
+
+      - name: Guard final tags against conflicting digests
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RUNTIME_DIGEST: ${{ steps.runtime_build.outputs.digest }}
+          ADDON_DIGEST: ${{ steps.addon_build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          guard_ref() {
+            local ref="$1"
+            local expected_digest="$2"
+            local error_file
+            local actual_digest=""
+            local error_text
+            error_file="$(mktemp)"
+            if actual_digest="$(docker buildx imagetools inspect "${ref}" --format '{{json .Manifest}}' 2>"${error_file}" | jq -er '.digest' 2>>"${error_file}")"; then
+              rm -f "${error_file}"
+              if [[ ! "${actual_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+                echo "ERROR: ${ref} returned an invalid manifest digest" >&2
+                exit 1
+              fi
+              if [[ "${actual_digest}" != "${expected_digest}" ]]; then
+                echo "ERROR: ${ref} ref exists with conflicting digest" >&2
+                exit 1
+              fi
+              echo "${ref} already resolves to expected digest"
+            else
+              error_text="$(cat "${error_file}")"
+              rm -f "${error_file}"
+              if [[ -z "${actual_digest}" && "${error_text}" == "ERROR: ${ref}: not found" ]]; then
+                echo "${ref} is absent and may be created"
+              else
+                echo "ERROR: unable to determine whether ${ref} already exists" >&2
+                exit 1
+              fi
+            fi
+          }
+          guard_ref "${RUNTIME_IMAGE}:${RELEASE_TAG}" "${RUNTIME_DIGEST}"
+          guard_ref "${RUNTIME_IMAGE}:${RELEASE_VERSION}" "${RUNTIME_DIGEST}"
+          guard_ref "${ADDON_IMAGE}:${RELEASE_TAG}" "${ADDON_DIGEST}"
+          guard_ref "${ADDON_IMAGE}:${RELEASE_VERSION}" "${ADDON_DIGEST}"
+
+      - name: Revalidate remote tag before final promotion
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VALIDATED_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          REMOTE_URL: ${{ github.server_url }}/${{ github.repository }}.git
+        run: |
+          set -euo pipefail
+          get_repository_state() {
+            gh api -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/${GITHUB_REPOSITORY}" \
+              --jq '[.full_name, .default_branch] | @tsv'
+          }
+          repository_state="$(get_repository_state)"
+          live_repository=""
+          live_default_branch=""
+          extra=""
+          IFS=$'\t' read -r live_repository live_default_branch extra \
+            <<< "${repository_state}"
+          if [[ -z "${live_repository}" || -z "${live_default_branch}" || -n "${extra:-}" || "${repository_state}" == *$'\n'* || "${live_repository,,}" != "${GITHUB_REPOSITORY,,}" || "${live_default_branch}" != "${VALIDATED_DEFAULT_BRANCH}" ]]; then
+            echo "ERROR: live repository identity or default branch is invalid" >&2
+            exit 1
+          fi
+          if ! git check-ref-format "refs/heads/${live_default_branch}" >/dev/null; then
+            echo "ERROR: live default branch is not a valid Git branch ref" >&2
+            exit 1
+          fi
+          branch_ref="refs/heads/${live_default_branch}"
+          branch_refs="$(git ls-remote --exit-code "${REMOTE_URL}" "${branch_ref}")"
+          branch_sha=""
+          branch_count=0
+          branch_unexpected=false
+          while IFS=$'\t' read -r ref_sha ref_name extra; do
+            if [[ -z "${ref_sha}" && -z "${ref_name}" ]]; then
+              continue
+            fi
+            if [[ ! "${ref_sha}" =~ ^[0-9a-f]{40}$ || "${ref_name}" != "${branch_ref}" || -n "${extra:-}" ]]; then
+              branch_unexpected=true
+              continue
+            fi
+            branch_count=$((branch_count + 1))
+            branch_sha="${ref_sha}"
+          done <<< "${branch_refs}"
+          if [[ "${branch_count}" -ne 1 || "${branch_unexpected}" == "true" || "${branch_sha}" != "${SOURCE_SHA}" ]]; then
+            echo "ERROR: protected default branch no longer resolves exactly to verified source SHA" >&2
+            exit 1
+          fi
+          direct_ref="refs/tags/${RELEASE_TAG}"
+          peeled_ref="refs/tags/${RELEASE_TAG}^{}"
+          remote_refs="$(git ls-remote --exit-code "${REMOTE_URL}" "${direct_ref}" "${peeled_ref}")"
+          direct_sha=""
+          peeled_sha=""
+          direct_count=0
+          peeled_count=0
+          unexpected_ref=false
+          while IFS=$'\t' read -r ref_sha ref_name extra; do
+            if [[ -z "${ref_sha}" && -z "${ref_name}" ]]; then
+              continue
+            fi
+            if [[ ! "${ref_sha}" =~ ^[0-9a-f]{40}$ || -z "${ref_name}" || -n "${extra:-}" ]]; then
+              unexpected_ref=true
+              continue
+            fi
+            case "${ref_name}" in
+              "${direct_ref}")
+                direct_count=$((direct_count + 1))
+                direct_sha="${ref_sha}"
+                ;;
+              "${peeled_ref}")
+                peeled_count=$((peeled_count + 1))
+                peeled_sha="${ref_sha}"
+                ;;
+              *)
+                unexpected_ref=true
+                ;;
+            esac
+          done <<< "${remote_refs}"
+          if [[ "${direct_count}" -ne 1 || "${peeled_count}" -ne 1 || "${unexpected_ref}" == "true" ]]; then
+            echo "ERROR: remote release tag must return exactly one direct tag-object ref and one peeled ref" >&2
+            exit 1
+          fi
+          if [[ "${direct_sha}" == "${peeled_sha}" ]]; then
+            echo "ERROR: remote release tag must be annotated with a distinct tag-object SHA" >&2
+            exit 1
+          fi
+          if [[ "${peeled_sha}" != "${SOURCE_SHA}" ]]; then
+            echo "ERROR: remote release tag peeled SHA must equal the verified source SHA" >&2
+            exit 1
+          fi
+          repository_state_after="$(get_repository_state)"
+          if [[ "${repository_state_after}" != "${repository_state}" ]]; then
+            echo "ERROR: live repository identity or default branch changed during revalidation" >&2
+            exit 1
+          fi
+
+      - name: Promote verified digests to release tags
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RUNTIME_DIGEST: ${{ steps.runtime_build.outputs.digest }}
+          ADDON_DIGEST: ${{ steps.addon_build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --tag "${RUNTIME_IMAGE}:${RELEASE_TAG}" \
+            --tag "${RUNTIME_IMAGE}:${RELEASE_VERSION}" \
+            "${RUNTIME_IMAGE}@${RUNTIME_DIGEST}"
+          docker buildx imagetools create \
+            --tag "${ADDON_IMAGE}:${RELEASE_TAG}" \
+            --tag "${ADDON_IMAGE}:${RELEASE_VERSION}" \
+            "${ADDON_IMAGE}@${ADDON_DIGEST}"
+
+      - name: Verify promoted release tags
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RUNTIME_DIGEST: ${{ steps.runtime_build.outputs.digest }}
+          ADDON_DIGEST: ${{ steps.addon_build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          verify_ref() {
+            local ref="$1"
+            local expected_digest="$2"
+            local actual_digest
+            if ! actual_digest="$(docker buildx imagetools inspect "${ref}" --format '{{json .Manifest}}' | jq -er '.digest')"; then
+              echo "ERROR: post-promotion ref could not be inspected" >&2
+              exit 1
+            fi
+            if [[ ! "${actual_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "ERROR: post-promotion ref returned an invalid manifest digest" >&2
+              exit 1
+            fi
+            if [[ "${actual_digest}" != "${expected_digest}" ]]; then
+              echo "ERROR: post-promotion ref does not resolve to expected digest" >&2
+              exit 1
+            fi
+          }
+          verify_ref "${RUNTIME_IMAGE}:${RELEASE_TAG}" "${RUNTIME_DIGEST}"
+          verify_ref "${RUNTIME_IMAGE}:${RELEASE_VERSION}" "${RUNTIME_DIGEST}"
+          verify_ref "${ADDON_IMAGE}:${RELEASE_TAG}" "${ADDON_DIGEST}"
+          verify_ref "${ADDON_IMAGE}:${RELEASE_VERSION}" "${ADDON_DIGEST}"
+
+  prerelease:
+    if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.ref_protected }}
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - name: Revalidate remote tag before prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VALIDATED_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+          SOURCE_SHA: ${{ needs.publish.outputs.source_sha }}
+          REMOTE_URL: ${{ github.server_url }}/${{ github.repository }}.git
+        run: |
+          set -euo pipefail
+          get_repository_state() {
+            gh api -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/${GITHUB_REPOSITORY}" \
+              --jq '[.full_name, .default_branch] | @tsv'
+          }
+          repository_state="$(get_repository_state)"
+          live_repository=""
+          live_default_branch=""
+          extra=""
+          IFS=$'\t' read -r live_repository live_default_branch extra \
+            <<< "${repository_state}"
+          if [[ -z "${live_repository}" || -z "${live_default_branch}" || -n "${extra:-}" || "${repository_state}" == *$'\n'* || "${live_repository,,}" != "${GITHUB_REPOSITORY,,}" || "${live_default_branch}" != "${VALIDATED_DEFAULT_BRANCH}" ]]; then
+            echo "ERROR: live repository identity or default branch is invalid" >&2
+            exit 1
+          fi
+          if ! git check-ref-format "refs/heads/${live_default_branch}" >/dev/null; then
+            echo "ERROR: live default branch is not a valid Git branch ref" >&2
+            exit 1
+          fi
+          branch_ref="refs/heads/${live_default_branch}"
+          branch_refs="$(git ls-remote --exit-code "${REMOTE_URL}" "${branch_ref}")"
+          branch_sha=""
+          branch_count=0
+          branch_unexpected=false
+          while IFS=$'\t' read -r ref_sha ref_name extra; do
+            if [[ -z "${ref_sha}" && -z "${ref_name}" ]]; then
+              continue
+            fi
+            if [[ ! "${ref_sha}" =~ ^[0-9a-f]{40}$ || "${ref_name}" != "${branch_ref}" || -n "${extra:-}" ]]; then
+              branch_unexpected=true
+              continue
+            fi
+            branch_count=$((branch_count + 1))
+            branch_sha="${ref_sha}"
+          done <<< "${branch_refs}"
+          if [[ "${branch_count}" -ne 1 || "${branch_unexpected}" == "true" || "${branch_sha}" != "${SOURCE_SHA}" ]]; then
+            echo "ERROR: protected default branch no longer resolves exactly to verified source SHA" >&2
+            exit 1
+          fi
+          direct_ref="refs/tags/${RELEASE_TAG}"
+          peeled_ref="refs/tags/${RELEASE_TAG}^{}"
+          remote_refs="$(git ls-remote --exit-code "${REMOTE_URL}" "${direct_ref}" "${peeled_ref}")"
+          direct_sha=""
+          peeled_sha=""
+          direct_count=0
+          peeled_count=0
+          unexpected_ref=false
+          while IFS=$'\t' read -r ref_sha ref_name extra; do
+            if [[ -z "${ref_sha}" && -z "${ref_name}" ]]; then
+              continue
+            fi
+            if [[ ! "${ref_sha}" =~ ^[0-9a-f]{40}$ || -z "${ref_name}" || -n "${extra:-}" ]]; then
+              unexpected_ref=true
+              continue
+            fi
+            case "${ref_name}" in
+              "${direct_ref}")
+                direct_count=$((direct_count + 1))
+                direct_sha="${ref_sha}"
+                ;;
+              "${peeled_ref}")
+                peeled_count=$((peeled_count + 1))
+                peeled_sha="${ref_sha}"
+                ;;
+              *)
+                unexpected_ref=true
+                ;;
+            esac
+          done <<< "${remote_refs}"
+          if [[ "${direct_count}" -ne 1 || "${peeled_count}" -ne 1 || "${unexpected_ref}" == "true" ]]; then
+            echo "ERROR: remote release tag must return exactly one direct tag-object ref and one peeled ref" >&2
+            exit 1
+          fi
+          if [[ "${direct_sha}" == "${peeled_sha}" ]]; then
+            echo "ERROR: remote release tag must be annotated with a distinct tag-object SHA" >&2
+            exit 1
+          fi
+          if [[ "${peeled_sha}" != "${SOURCE_SHA}" ]]; then
+            echo "ERROR: remote release tag peeled SHA must equal the verified source SHA" >&2
+            exit 1
+          fi
+          repository_state_after="$(get_repository_state)"
+          if [[ "${repository_state_after}" != "${repository_state}" ]]; then
+            echo "ERROR: live repository identity or default branch changed during revalidation" >&2
+            exit 1
+          fi
+
+      - name: Verify or create idempotent GitHub prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+          SOURCE_SHA: ${{ needs.publish.outputs.source_sha }}
+          RUNTIME_IMAGE: ${{ env.RUNTIME_IMAGE }}
+          ADDON_IMAGE: ${{ env.ADDON_IMAGE }}
+          RUNTIME_DIGEST: ${{ needs.publish.outputs.runtime_digest }}
+          ADDON_DIGEST: ${{ needs.publish.outputs.addon_digest }}
+        run: |
+          set -euo pipefail
+          readonly LOOKUP_ABSENT=4
+          readonly LOOKUP_FAILED=10
+          readonly LOOKUP_AMBIGUOUS=11
+          digest_pattern='^sha256:[0-9a-f]{64}$'
+          if [[ ! "${RUNTIME_DIGEST}" =~ ${digest_pattern} ]]; then
+            echo "ERROR: verified runtime digest is missing or invalid" >&2
+            exit 1
+          fi
+          if [[ ! "${ADDON_DIGEST}" =~ ${digest_pattern} ]]; then
+            echo "ERROR: verified add-on digest is missing or invalid" >&2
+            exit 1
+          fi
+          release_notes_path="docs/releases/${RELEASE_TAG}.md"
+          release_workspace="$(mktemp -d)"
+          trap 'rm -rf "${release_workspace}"' EXIT
+          curated_notes_file="${release_workspace}/curated-release-notes.md"
+          release_body_file="${release_workspace}/release-body.md"
+          if ! gh api --method GET \
+            -H 'Accept: application/vnd.github.raw+json' \
+            "repos/${GITHUB_REPOSITORY}/contents/${release_notes_path}" \
+            -f ref="${SOURCE_SHA}" > "${curated_notes_file}"; then
+            echo "ERROR: unable to fetch curated release notes at ${release_notes_path} from verified source ${SOURCE_SHA}" >&2
+            exit 1
+          fi
+          if [[ ! -s "${curated_notes_file}" ]] \
+            || ! grep -q '[^[:space:]]' "${curated_notes_file}"; then
+            echo "ERROR: curated release notes are missing or blank" >&2
+            exit 1
+          fi
+          expected_notes_prefix="$(printf '%s\n' \
+            '## Immutable release images' \
+            '' \
+            "- Runtime: ${RUNTIME_IMAGE}@${RUNTIME_DIGEST}" \
+            "- Home Assistant add-on: ${ADDON_IMAGE}@${ADDON_DIGEST}" \
+            '- Platforms: linux/amd64, linux/arm64, linux/arm/v7, linux/386')"
+          {
+            printf '%s\n\n' "${expected_notes_prefix}"
+            cat "${curated_notes_file}"
+          } > "${release_body_file}"
+
+          lookup_release() {
+            local error_file gh_status lookup_error release_json
+            error_file="$(mktemp)"
+            if release_json="$(
+              gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" \
+                2>"${error_file}"
+            )"; then
+              rm -f "${error_file}"
+              if ! jq -e 'type == "object" and has("tag_name") and has("draft") and has("prerelease") and has("body")' \
+                <<< "${release_json}" >/dev/null; then
+                echo "ERROR: release lookup returned malformed or ambiguous JSON" >&2
+                return "${LOOKUP_AMBIGUOUS}"
+              fi
+              printf '%s\n' "${release_json}"
+              return 0
+            else
+              gh_status=$?
+              lookup_error="$(<"${error_file}")"
+              rm -f "${error_file}"
+              if [[ "${gh_status}" -ne 0 ]] \
+                && grep -Eq '\(HTTP 404\)[[:space:]]*$' <<< "${lookup_error}"; then
+                return "${LOOKUP_ABSENT}"
+              fi
+              echo "ERROR: release lookup failed without an explicit HTTP 404" >&2
+              printf '%s\n' "${lookup_error}" >&2
+              return "${LOOKUP_FAILED}"
+            fi
+          }
+
+          verify_release() {
+            local context="$1"
+            local release_json="$2"
+            if jq -e \
+              --arg tag "${RELEASE_TAG}" \
+              --rawfile expected_body "${release_body_file}" \
+              '(.tag_name == $tag) and
+               (.draft == false and .prerelease == true) and
+               ((.body // "") == $expected_body)' \
+              <<< "${release_json}" >/dev/null; then
+              return 0
+            fi
+            echo "ERROR: ${context} does not match the release tag, prerelease state, or exact release notes" >&2
+            jq -c '{tag_name, draft, prerelease}' \
+              <<< "${release_json}" >&2 || true
+            return 1
+          }
+
+          verify_final_release() {
+            local create_status="$1"
+            local attempt final_release final_status
+            for attempt in 1 2 3; do
+              set +e
+              final_release="$(lookup_release)"
+              final_status=$?
+              set -e
+              if [[ "${final_status}" -eq 0 ]]; then
+                if ! verify_release "post-create release" "${final_release}"; then
+                  return 1
+                fi
+                if [[ "${create_status}" -ne 0 ]]; then
+                  echo "An exact release now exists; accepting the idempotent retry after a lost response or race."
+                fi
+                return 0
+              fi
+              if [[ "${final_status}" -eq "${LOOKUP_ABSENT}" && "${attempt}" -lt 3 ]]; then
+                sleep 2
+                continue
+              fi
+              if [[ "${final_status}" -eq "${LOOKUP_ABSENT}" ]]; then
+                echo "ERROR: release is still absent after the create attempt" >&2
+              else
+                echo "ERROR: post-create release verification failed with lookup status ${final_status}" >&2
+              fi
+              return 1
+            done
+            return 1
+          }
+
+          release_was_absent=false
+          set +e
+          existing_release="$(lookup_release)"
+          lookup_status=$?
+          set -e
+          if [[ "${lookup_status}" -eq 0 ]]; then
+            if ! verify_release "existing release" "${existing_release}"; then
+              exit 1
+            fi
+            echo "An exact release already exists; accepting the idempotent retry without creating another."
+          elif [[ "${lookup_status}" -eq "${LOOKUP_ABSENT}" ]]; then
+            release_was_absent=true
+            echo "Only an explicit, successfully queried absence permits creation; no release exists for ${RELEASE_TAG}."
+          else
+            echo "ERROR: refusing release creation after lookup status ${lookup_status}" >&2
+            exit 1
+          fi
+
+          create_status=0
+          if [[ "${release_was_absent}" == "true" ]]; then
+            set +e
+            create_output="$(
+              gh release create "${RELEASE_TAG}" \
+                --repo "${GITHUB_REPOSITORY}" \
+                --target "${SOURCE_SHA}" \
+                --verify-tag \
+                --prerelease \
+                --notes-file "${release_body_file}" \
+                --title "${RELEASE_TAG}" \
+                2>&1
+            )"
+            create_status=$?
+            set -e
+            if [[ "${create_status}" -ne 0 ]]; then
+              echo "Release creation returned status ${create_status}; verifying remote state before deciding failure." >&2
+              printf '%s\n' "${create_output}" >&2
+            fi
+          fi
+
+          verify_final_release "${create_status}"

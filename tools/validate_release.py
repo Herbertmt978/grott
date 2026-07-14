@@ -73,9 +73,9 @@ PUBLISH_ACTION_PREFIXES = {
     "Build and stage Home Assistant add-on candidate": "docker/build-push-action@",
 }
 EXPECTED_RELEASE_CONTROL_TOOL_SHA256 = (
-    "586a844ab4677ca80dca351831bce23483fd7bafa776cf86ef876bcc6cae7ab0"
+    "49c966ce0c7851ebf6c1b1c6027beeeddf1516281b5085968f6dc86856645430"
 )
-CANONICAL_PUBLISH_WORKFLOW_SHA256 = "a9d19762b13851ba312e85d0a03ea92bbbacc5c524812733e27573296cf070d3"
+CANONICAL_PUBLISH_WORKFLOW_SHA256 = "5cc1c54cc212aaaa44caa7a57f61556e774bbbbd7176e1de268e97667b0c86e4"
 PINNED_ACTION_RE = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
 INPUT_TAG_EXPRESSION_RE = re.compile(r"\$\{\{\s*inputs\.tag\s*}}")
 TAG_RE = re.compile(

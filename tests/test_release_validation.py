@@ -475,9 +475,9 @@ def run_public_release_gate(
                 {
                     "type": "pull_request",
                     "parameters": {
-                        "required_approving_review_count": 1,
-                        "dismiss_stale_reviews_on_push": True,
-                        "require_last_push_approval": True,
+                        "required_approving_review_count": 0,
+                        "dismiss_stale_reviews_on_push": False,
+                        "require_last_push_approval": False,
                         "required_review_thread_resolution": True,
                     },
                 },
@@ -492,13 +492,7 @@ def run_public_release_gate(
         ],
         "environment.json": {
             "name": "release",
-            "protection_rules": [
-                {
-                    "type": "required_reviewers",
-                    "prevent_self_review": True,
-                    "reviewers": [{"type": "User", "reviewer": {"id": 1}}],
-                }
-            ],
+            "protection_rules": [],
             "deployment_branch_policy": {
                 "protected_branches": True,
                 "custom_branch_policies": False,
@@ -519,32 +513,97 @@ def run_public_release_gate(
             ],
         },
     }
+
+    def branch_rule_parameters(rule_type: str) -> dict:
+        rule = next(
+            rule
+            for rule in fixtures["branch-rules.json"][0]
+            if rule.get("type") == rule_type
+        )
+        return rule["parameters"]
+
     if mode == "ci-failure":
         fixtures["ci-runs.json"]["workflow_runs"][0]["conclusion"] = "failure"
-    elif mode == "branch-review-missing":
+    elif mode == "branch-pr-missing":
         fixtures["branch-rules.json"][0] = [
             rule
             for rule in fixtures["branch-rules.json"][0]
             if rule.get("type") != "pull_request"
         ]
-    elif mode == "branch-review-count-malformed":
-        fixtures["branch-rules.json"][0][2]["parameters"][
+    elif mode == "branch-approval-nonzero":
+        branch_rule_parameters("pull_request")[
             "required_approving_review_count"
-        ] = "1"
+        ] = 1
+    elif mode == "branch-conflicting-pr-rules":
+        conflicting_rule = copy.deepcopy(
+            next(
+                rule
+                for rule in fixtures["branch-rules.json"][0]
+                if rule.get("type") == "pull_request"
+            )
+        )
+        conflicting_rule["parameters"]["required_approving_review_count"] = 1
+        fixtures["branch-rules.json"][0].append(conflicting_rule)
+    elif mode == "branch-approval-count-malformed":
+        branch_rule_parameters("pull_request")[
+            "required_approving_review_count"
+        ] = "0"
+    elif mode == "branch-approval-count-boolean":
+        branch_rule_parameters("pull_request")[
+            "required_approving_review_count"
+        ] = False
+    elif mode == "branch-stale-review-dismissal":
+        branch_rule_parameters("pull_request")[
+            "dismiss_stale_reviews_on_push"
+        ] = True
+    elif mode == "branch-stale-review-setting-missing":
+        branch_rule_parameters("pull_request").pop(
+            "dismiss_stale_reviews_on_push"
+        )
+    elif mode == "branch-stale-review-setting-malformed":
+        branch_rule_parameters("pull_request")[
+            "dismiss_stale_reviews_on_push"
+        ] = 0
+    elif mode == "branch-last-push-approval":
+        branch_rule_parameters("pull_request")[
+            "require_last_push_approval"
+        ] = True
+    elif mode == "branch-last-push-setting-malformed":
+        branch_rule_parameters("pull_request")[
+            "require_last_push_approval"
+        ] = 0
+    elif mode == "branch-thread-resolution-missing":
+        branch_rule_parameters("pull_request").pop(
+            "required_review_thread_resolution"
+        )
+    elif mode == "branch-thread-resolution-malformed":
+        branch_rule_parameters("pull_request")[
+            "required_review_thread_resolution"
+        ] = 1
     elif mode == "branch-status-missing":
         fixtures["branch-rules.json"][0] = [
             rule
             for rule in fixtures["branch-rules.json"][0]
             if rule.get("type") != "required_status_checks"
         ]
-    elif mode == "environment-review-missing":
-        fixtures["environment.json"]["protection_rules"] = []
-    elif mode == "environment-self-review":
-        fixtures["environment.json"]["protection_rules"][0][
-            "prevent_self_review"
+    elif mode == "branch-status-not-strict":
+        branch_rule_parameters("required_status_checks")[
+            "strict_required_status_checks_policy"
         ] = False
-    elif mode == "environment-reviewer-malformed":
-        fixtures["environment.json"]["protection_rules"][0]["reviewers"] = [{}]
+    elif mode == "branch-status-strict-setting-malformed":
+        branch_rule_parameters("required_status_checks")[
+            "strict_required_status_checks_policy"
+        ] = 1
+    elif mode == "environment-optional-reviewer":
+        fixtures["environment.json"]["protection_rules"] = [
+            {
+                "type": "required_reviewers",
+                "prevent_self_review": True,
+                "reviewers": [{"type": "User", "reviewer": {"id": 1}}],
+            }
+        ]
+    elif mode == "environment-protection-rules-malformed":
+        fixtures["environment.json"]["protection_rules"] = {}
     elif mode == "environment-unrestricted":
         fixtures["environment.json"]["deployment_branch_policy"] = None
     elif mode == "tag-rules-missing":
@@ -989,13 +1048,21 @@ def test_validation_is_split_from_package_write_authority() -> None:
     release_control_source = RELEASE_CONTROL_TOOL.read_text(encoding="utf-8")
     for token in (
         "required_approving_review_count",
+        "dismiss_stale_reviews_on_push",
+        "require_last_push_approval",
+        "required_review_thread_resolution",
         "strict_required_status_checks_policy",
         '"refs/tags/v*"',
-        "required_reviewers",
-        "prevent_self_review",
         "protected_branches",
     ):
         assert token in release_control_source
+    for token in (
+        "required_reviewers",
+        "prevent_self_review",
+        "valid_reviewer",
+        "has_required_environment_review",
+    ):
+        assert token not in release_control_source
 
     publish_checkout = next(
         step
@@ -1039,13 +1106,68 @@ def test_validator_rejects_modified_release_control_tool(tmp_path: Path) -> None
     ("mode", "accepted", "diagnostic"),
     (
         ("valid", True, "Public release controls verified"),
+        ("environment-optional-reviewer", True, "Public release controls verified"),
         ("ci-failure", False, "no successful protected-branch run"),
-        ("branch-review-missing", False, "pull-request review policy"),
-        ("branch-review-count-malformed", False, "pull-request review policy"),
+        ("branch-pr-missing", False, "solo-maintainer pull-request policy"),
+        ("branch-approval-nonzero", False, "solo-maintainer pull-request policy"),
+        ("branch-conflicting-pr-rules", False, "solo-maintainer pull-request policy"),
+        (
+            "branch-approval-count-malformed",
+            False,
+            "solo-maintainer pull-request policy",
+        ),
+        (
+            "branch-approval-count-boolean",
+            False,
+            "solo-maintainer pull-request policy",
+        ),
+        (
+            "branch-stale-review-dismissal",
+            False,
+            "solo-maintainer pull-request policy",
+        ),
+        (
+            "branch-stale-review-setting-missing",
+            False,
+            "solo-maintainer pull-request policy",
+        ),
+        (
+            "branch-stale-review-setting-malformed",
+            False,
+            "solo-maintainer pull-request policy",
+        ),
+        (
+            "branch-last-push-approval",
+            False,
+            "solo-maintainer pull-request policy",
+        ),
+        (
+            "branch-last-push-setting-malformed",
+            False,
+            "solo-maintainer pull-request policy",
+        ),
+        (
+            "branch-thread-resolution-missing",
+            False,
+            "solo-maintainer pull-request policy",
+        ),
+        (
+            "branch-thread-resolution-malformed",
+            False,
+            "solo-maintainer pull-request policy",
+        ),
         ("branch-status-missing", False, "strict required CI status check"),
-        ("environment-review-missing", False, "independent reviewer"),
-        ("environment-self-review", False, "independent reviewer"),
-        ("environment-reviewer-malformed", False, "independent reviewer"),
+        ("branch-status-not-strict", False, "strict required CI status check"),
+        (
+            "branch-status-strict-setting-malformed",
+            False,
+            "strict required CI status check",
+        ),
+        (
+            "environment-protection-rules-malformed",
+            False,
+            "release environment protection rules response is malformed",
+        ),
         ("environment-unrestricted", False, "protected branches only"),
         ("environment-api-error", False, "not found"),
         ("tag-rules-missing", False, "no active release-tag ruleset"),

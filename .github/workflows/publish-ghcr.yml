@@ -169,7 +169,7 @@ jobs:
           gate_dir="$(mktemp -d)"
           trap 'rm -rf "${gate_dir}"' EXIT
           api_version="2026-03-10"
-          gate_tool_sha256="586a844ab4677ca80dca351831bce23483fd7bafa776cf86ef876bcc6cae7ab0"
+          gate_tool_sha256="49c966ce0c7851ebf6c1b1c6027beeeddf1516281b5085968f6dc86856645430"
           printf '%s  %s\n' "${gate_tool_sha256}" \
             tools/verify_release_controls.py | sha256sum --check --strict
           encoded_branch="$(python -c \

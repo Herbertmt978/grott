@@ -81,23 +81,25 @@ def valid_release_tag(tag: str) -> bool:
     )
 
 
-def has_required_pull_request_rule(rules: list[dict[str, Any]]) -> bool:
+def has_required_solo_pull_request_rule(rules: list[dict[str, Any]]) -> bool:
+    found_pull_request_rule = False
     for rule in rules:
         if rule.get("type") != "pull_request":
             continue
+        found_pull_request_rule = True
         parameters = rule.get("parameters")
         if not isinstance(parameters, dict):
-            continue
+            return False
         review_count = parameters.get("required_approving_review_count")
-        if (
+        if not (
             type(review_count) is int
-            and review_count >= 1
-            and parameters.get("dismiss_stale_reviews_on_push") is True
-            and parameters.get("require_last_push_approval") is True
+            and review_count == 0
+            and parameters.get("dismiss_stale_reviews_on_push") is False
+            and parameters.get("require_last_push_approval") is False
             and parameters.get("required_review_thread_resolution") is True
         ):
-            return True
-    return False
+            return False
+    return found_pull_request_rule
 
 
 def has_required_status_rule(rules: list[dict[str, Any]]) -> bool:
@@ -119,31 +121,6 @@ def has_required_status_rule(rules: list[dict[str, Any]]) -> bool:
         if (
             parameters.get("strict_required_status_checks_policy") is True
             and "test" in contexts
-        ):
-            return True
-    return False
-
-
-def valid_reviewer(reviewer: Any) -> bool:
-    if not isinstance(reviewer, dict) or reviewer.get("type") not in {"User", "Team"}:
-        return False
-    subject = reviewer.get("reviewer")
-    identifier = subject.get("id") if isinstance(subject, dict) else None
-    return type(identifier) is int and identifier > 0
-
-
-def has_required_environment_review(environment: dict[str, Any]) -> bool:
-    protection_rules = environment.get("protection_rules")
-    if not isinstance(protection_rules, list):
-        return False
-    for rule in protection_rules:
-        if not isinstance(rule, dict) or rule.get("type") != "required_reviewers":
-            continue
-        reviewers = rule.get("reviewers")
-        if (
-            rule.get("prevent_self_review") is True
-            and isinstance(reviewers, list)
-            and any(valid_reviewer(reviewer) for reviewer in reviewers)
         ):
             return True
     return False
@@ -230,18 +207,16 @@ def verify_release_controls(
     rule_types = {rule.get("type") for rule in branch_rules}
     if not {"deletion", "non_fast_forward"}.issubset(rule_types):
         fail("default branch rules do not block deletion and force-pushes")
-    if not has_required_pull_request_rule(branch_rules):
-        fail("default branch is missing the required pull-request review policy")
+    if not has_required_solo_pull_request_rule(branch_rules):
+        fail("default branch is missing the required solo-maintainer pull-request policy")
     if not has_required_status_rule(branch_rules):
         fail("default branch is missing strict required CI status check 'test'")
 
     environment = load_json(evidence_dir / "environment.json")
     if not isinstance(environment, dict) or environment.get("name") != "release":
         fail("release environment does not exist")
-    if not has_required_environment_review(environment):
-        fail(
-            "release environment requires an independent reviewer with self-review blocked"
-        )
+    if not isinstance(environment.get("protection_rules"), list):
+        fail("release environment protection rules response is malformed")
     deployment_policy = environment.get("deployment_branch_policy")
     if (
         not isinstance(deployment_policy, dict)

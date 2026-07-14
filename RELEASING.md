@@ -10,7 +10,7 @@ This runbook prepares and verifies the fork's beta artifacts. It does not grant 
 | Bundled Grott core (upstream startup version) | `2.8.3` | `grott.py` (`verrel`) |
 | Bundled Home Assistant extension | `0.0.7-rc2` | `examples/Home Assistent/grott_ha.py` (`__version__`) |
 
-The release images are `ghcr.io/herbertmt978/grott` and `ghcr.io/herbertmt978/grott-ha-docker`. Both must represent the same reviewed source SHA and the supported platforms `linux/amd64`, `linux/arm64`, `linux/arm/v7`, and `linux/386`.
+The release images are `ghcr.io/herbertmt978/grott` and `ghcr.io/herbertmt978/grott-ha-docker`. Both must represent the same verified source SHA and the supported platforms `linux/amd64`, `linux/arm64`, `linux/arm/v7`, and `linux/386`.
 
 ## Hard gates
 
@@ -19,19 +19,21 @@ The release images are `ghcr.io/herbertmt978/grott` and `ghcr.io/herbertmt978/gr
 Every item below is fail-closed. A missing, ambiguous, or failing item stops the release:
 
 - Explicit upstream licence or written redistribution permission covers the inherited code and built images.
-- The default branch is a protected default branch and the release commit has passed required review and hosted CI.
-- A protected `release` environment exists, is restricted to the protected default branch, and requires an independent reviewer before package or release writes.
+- The default branch is protected, changes reach it through a pull request, and the exact release commit has a current, successful hosted `test` CI result. The pull-request rule must require exactly zero approving reviews, keep stale-review dismissal and last-push approval disabled, and require review threads to be resolved.
+- A protected `release` environment exists and is restricted to the protected default branch. It does not require an independent reviewer.
 - A protected `v*` tag ruleset restricts tag creation, update, and deletion to authorized release maintainers.
 - The hosted CI run succeeds at the exact proposed source SHA, including tests, release/add-on validators, locked dependency audit, native image smoke tests, four-platform Buildx builds, artifact checks, and vulnerability/secret scans.
 - Controlled Home Assistant UAT passes with a backup and tested rollback path.
 
-The workflow's read-only control gate uses the hash-pinned `tools/verify_release_controls.py` verifier to check the exact default-branch SHA, a successful `ci.yml` push run at that SHA, active branch rules, the reviewed `release` environment, and an active `v*` tag ruleset before package-write permission is granted. GitHub's read-only API does not expose every bypass setting. Immediately before approving the `release` environment, an independent reviewer must also inspect the GitHub settings UI and record that:
+The workflow's read-only control gate uses the hash-pinned `tools/verify_release_controls.py` verifier to check the exact default-branch SHA, a successful `ci.yml` push run at that SHA, the solo-maintainer branch rules, the protected `release` environment, and an active `v*` tag ruleset before package-write permission is granted. GitHub's read-only API does not expose every bypass setting. Immediately before manually dispatching the release workflow, the solo maintainer must inspect the GitHub settings UI and record that:
 
 - branch and tag ruleset bypass actors are limited to the explicitly authorized release maintainers;
 - administrators are not allowed to bypass the `release` environment protection rules; and
 - the required `test` status context is supplied by the intended GitHub Actions integration.
 
-Do not approve the environment if controls changed after the automated gate ran. The latest read-only GitHub audit on 2026-07-14 found no rulesets, no environments, and an unprotected default branch. Those controls must be created and independently re-checked before any release; this document does not authorize changing them.
+Record and check those settings immediately before dispatch. Do not start the workflow if they do not match the required state. The automated gate runs after dispatch and re-checks the controls available through GitHub's read-only API, but it cannot continuously verify the UI-only bypass settings. If the maintainer sees any control change before publication finishes, cancel the run. The latest read-only GitHub audit on 2026-07-14 found no rulesets, no environments, and an unprotected default branch. Those controls must be created and personally re-checked by the maintainer before any release; this document does not authorize changing them.
+
+This model has one important residual risk: compromise of the sole maintainer account can authorize a release without a second person stopping it. Protect that account with strong two-factor authentication, preferably passkeys or hardware security keys, and keep active credentials and scoped tokens to the minimum needed for release work.
 
 ### Protocol-capture privacy boundary
 
@@ -134,11 +136,11 @@ git ls-remote "${RELEASE_REMOTE}" "refs/tags/${TAG}" "refs/tags/${TAG}^{}"
 gh workflow run publish-ghcr.yml --repo "${RELEASE_REPO}" --ref "${DEFAULT_BRANCH}" -f tag="${TAG}"
 ```
 
-The workflow preserves the protected dispatch SHA before tag checkout, requires an annotated tag whose peeled commit equals that SHA exactly, verifies the live repository controls with a hash-pinned read-only gate, and requires the protected `release` environment. Before package login, final promotion, and prerelease creation, it queries GitHub's live repository identity and current default branch, requires the branch name to remain the one whose controls and CI were reviewed, requires that exact branch tip to match the source SHA, verifies one distinct direct tag-object ref with one matching peeled ref, and confirms the live repository state did not change during those checks. It stages source-SHA candidate manifests, validates and scans each platform by immutable digest, then promotes those digests to both `v0.1.10-beta` and `0.1.10-beta`. It never builds directly to a final release tag.
+The workflow preserves the protected dispatch SHA before tag checkout, requires an annotated tag whose peeled commit equals that SHA exactly, verifies the live repository controls with a hash-pinned read-only gate, and requires the protected `release` environment. Before package login, final promotion, and prerelease creation, it queries GitHub's live repository identity and current default branch, requires the branch name to remain the one whose controls and CI passed the gate, requires that exact branch tip to match the source SHA, verifies one distinct direct tag-object ref with one matching peeled ref, and confirms the live repository state did not change during those checks. It stages source-SHA candidate manifests, validates and scans each platform by immutable digest, then promotes those digests to both `v0.1.10-beta` and `0.1.10-beta`. It never builds directly to a final release tag.
 
 ## Human-written release notes
 
-The canonical public notes for this release are committed at `docs/releases/v0.1.10-beta.md`. They must be reviewed with the release commit and use plain language to explain the problem, the fix, why the problem mattered, and the benefit to users. The file must remain UTF-8, LF-only, non-empty, and must not contain the CI-owned `## Immutable release images` heading.
+The canonical public notes for this release are committed at `docs/releases/v0.1.10-beta.md`. They must be checked with the release commit and use plain language to explain the problem, the fix, why the problem mattered, and the benefit to users. The file must remain UTF-8, LF-only, non-empty, and must not contain the CI-owned `## Immutable release images` heading.
 
 At prerelease creation, the workflow fetches this file through the GitHub Contents API at the exact source SHA already proven by the protected annotated tag. It never reads notes from a mutable branch or generates replacement prose. CI constructs one deterministic body containing the verified runtime/add-on digests and four-platform line, followed by the exact human-written file, and passes that body through `--notes-file`.
 
@@ -165,7 +167,7 @@ Copy the immutable runtime and add-on references from the prerelease notes into 
 
 The workflow is designed for an **Idempotent retry** of the same protected tag and source SHA:
 
-- If validation or a candidate scan fails, no final release tags are promoted. Fix the cause in a new reviewed commit and use a new release tag/version; never move the failed protected tag.
+- If validation or a candidate scan fails, no final release tags are promoted. Fix the cause in a new pull request, require hosted `test` CI to pass at the new commit, and use a new release tag/version; never move the failed protected tag.
 - If one final reference was promoted before a later transient failure, rerun the same workflow only when its candidate digests are unchanged. The conflict guard accepts an existing final reference only when it already equals the candidate digest.
 - If every final reference is correct but prerelease creation failed, rerun the same workflow. Digest promotion and release creation are safe only when the existing values match exactly.
 - If any final tag points to a different digest, stop. Do not overwrite or delete it automatically. Preserve logs, compare the remote tag/source SHA, and obtain explicit owner approval for a documented recovery decision.

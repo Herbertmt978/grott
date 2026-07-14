@@ -13,6 +13,8 @@ from tools import validate_release
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE_PREPARED_DATE = "2026-07-14"
+CURRENT_RELEASE_VERSION = "0.1.11-beta"
+CURRENT_RELEASE_TAG = f"v{CURRENT_RELEASE_VERSION}"
 ROLLBACK_RUNTIME_DIGEST = (
     "sha256:e9314693651e0cce82c603b53f88c66ae4757d93e09b97a24c56070c845d2351"
 )
@@ -36,7 +38,7 @@ def copy_release_metadata(destination: Path) -> None:
     for directory in (".github", "addons", "docker", "docs", "examples"):
         ignore = shutil.ignore_patterns("aegis") if directory == "docs" else None
         shutil.copytree(ROOT / directory, destination / directory, ignore=ignore)
-    for filename in ("README.md", "grott.py"):
+    for filename in ("README.md", "grott.py", ".dockerignore"):
         shutil.copy2(ROOT / filename, destination / filename)
     releasing = ROOT / "RELEASING.md"
     if releasing.exists():
@@ -47,6 +49,11 @@ def copy_release_metadata(destination: Path) -> None:
         ROOT / "tools" / "verify_release_controls.py",
         tools_dir / "verify_release_controls.py",
     )
+
+
+def test_release_preparation_targets_v011_beta() -> None:
+    assert canonical_release_version() == CURRENT_RELEASE_VERSION
+    assert curated_release_notes_path().name == f"{CURRENT_RELEASE_TAG}.md"
 
 
 def test_current_release_metadata_is_aligned() -> None:
@@ -70,7 +77,10 @@ def test_current_release_metadata_is_aligned() -> None:
     assert f"/releases/tag/v{release_version}" not in readme
     assert f"ghcr.io/herbertmt978/grott:{release_version}" in readme
     assert f"Supported release candidate: `{release_version}`" in addon_docs
-    assert "Releases page is the availability authority" in readme
+    assert "latest supported release is `v0.1.9-beta`" in readme
+    assert "`v0.1.10-beta` remains a prerelease" in readme
+    assert "Releases page is the supported-availability authority" in readme
+    assert "does not prove that GHCR tags are absent" in readme
     assert "preparation examples only" in readme
 
 
@@ -135,6 +145,48 @@ def test_curated_release_notes_are_human_written_and_versioned() -> None:
         assert user_topic.lower() in text.lower()
 
 
+def test_v011_release_notes_cover_issue_6_and_safe_upgrade_contract() -> None:
+    path = ROOT / "docs" / "releases" / f"{CURRENT_RELEASE_TAG}.md"
+    assert path.is_file(), f"missing {path.relative_to(ROOT)}"
+    text = path.read_text(encoding="utf-8")
+    normalized = text.lower()
+
+    for required in (
+        "issue #6",
+        "32 entities",
+        "v0_1_9_standard",
+        "opt-in",
+        "all map",
+        "raw packet",
+        "parsing",
+        "forwarding",
+        "state data",
+        "retained discovery cleanup",
+        "metadata",
+        "upgrade",
+        "rollback",
+        "supported-availability authority",
+        "omitted option",
+        "next live packet",
+        "image rollback does not restore",
+        "home assistant repairs",
+        "changes carried forward from v0.1.10-beta",
+        "tcp frame reassembly",
+        "safe literal",
+        "non-root",
+        "exact-source annotated tags",
+    ):
+        assert required in normalized
+    assert "has not been published" not in normalized
+
+
+def test_entity_profile_docs_distinguish_generic_and_mod_all_counts() -> None:
+    for path in (ROOT / "README.md", ROOT / "addons/grott/DOCS.md"):
+        text = path.read_text(encoding="utf-8")
+        assert "T06NNNNXMOD" in text and "171 discovered entities" in text
+        assert "T06NNNNX` remains at the verified 32 entities" in text
+
+
 def test_packaged_release_is_honest_about_proxy_only_mode_support() -> None:
     notes = curated_release_notes_path().read_text(encoding="utf-8")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -142,7 +194,7 @@ def test_packaged_release_is_honest_about_proxy_only_mode_support() -> None:
     assert "moved that setup to the standard Docker image" not in notes
     assert "packaged Docker profiles support proxy mode only" in notes
     assert "do not upgrade either packaged image" in notes
-    assert "v0.1.10-beta images and supplied Compose profile" in readme
+    assert f"{CURRENT_RELEASE_TAG} images and supplied Compose profile" in readme
     assert "qualified for proxy mode only" in readme
 
 
@@ -174,6 +226,28 @@ def test_release_validator_rejects_invalid_curated_notes(
     assert any(expected_error.lower() in error.lower() for error in errors), errors
 
 
+@pytest.mark.parametrize(
+    "required_token",
+    (
+        "supported-availability authority",
+        "Changes carried forward from v0.1.10-beta",
+        "next live packet",
+        "Home Assistant Repairs",
+    ),
+)
+def test_release_validator_rejects_incomplete_public_notes(
+    tmp_path: Path, required_token: str
+) -> None:
+    copy_release_metadata(tmp_path)
+    path = curated_release_notes_path(tmp_path)
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace(required_token, "removed-token"), encoding="utf-8", newline="\n")
+
+    errors = validate_release.validate_worktree(tmp_path)
+
+    assert any("curated release notes" in error.lower() for error in errors), errors
+
+
 def test_current_docs_distinguish_the_three_version_domains() -> None:
     release_version = canonical_release_version()
     for path in (ROOT / "README.md", ROOT / "addons/grott/DOCS.md"):
@@ -181,7 +255,7 @@ def test_current_docs_distinguish_the_three_version_domains() -> None:
         assert "Fork/add-on release" in text and release_version in text
         assert "Bundled Grott core (upstream startup version)" in text
         assert "2.8.3" in text
-        assert "Bundled Home Assistant extension" in text and "0.0.7-rc2" in text
+        assert "Bundled Home Assistant extension" in text and "0.0.8" in text
 
 
 def test_operator_docs_cover_runtime_filesystem_constraints_and_rollback() -> None:
@@ -197,6 +271,10 @@ def test_operator_docs_cover_runtime_filesystem_constraints_and_rollback() -> No
     assert "optional file output" in readme
     assert "Backup" in addon_docs and "grott_last_push" in addon_docs
     assert "ShinePhone" in addon_docs
+    for text in (readme, releasing):
+        assert "Docker-backed Home Assistant" in text
+        assert "retained MQTT" in text
+        assert "Home Assistant Repairs" in text
     for text in (readme, addon_docs, releasing):
         assert "Grott pre-update rollback" in text
         assert "UAT must not begin" in text
@@ -229,7 +307,7 @@ def test_release_runbook_records_every_hard_gate_and_recovery_path() -> None:
         "Home Assistant UAT",
         "workflow_dispatch",
         "digest",
-        "docs/releases/v0.1.10-beta.md",
+        f"docs/releases/{CURRENT_RELEASE_TAG}.md",
         "human-written",
         "exact source SHA",
         "exact full body",
@@ -254,6 +332,34 @@ def test_legal_status_records_permission_and_commercial_use_limit() -> None:
     assert "Public release still requires" in legal
     assert "Local/private testing" in legal
     assert "Publish Home Assistant and Docker images" not in legal
+    assert "Redistribution permission alone does not authorize relicensing" in legal
+
+    public_docs = (
+        ROOT / "README.md",
+        ROOT / "addons/grott/DOCS.md",
+        ROOT / "RELEASING.md",
+        ROOT / "docs/LEGAL.md",
+        ROOT / "docs/releases" / f"{CURRENT_RELEASE_TAG}.md",
+    )
+    for path in public_docs:
+        text = path.read_text(encoding="utf-8")
+        assert "redistribution permission has been obtained" in text
+        assert "does not authorize commercial use or reuse unless Johan Meijer" in text
+        assert "financial reward or appreciation is directed to him" in text
+        assert "No public redistribution release may be made until" not in text
+
+
+def test_release_validator_rejects_packaged_sparse_generic_override(tmp_path: Path) -> None:
+    copy_release_metadata(tmp_path)
+    path = tmp_path / ".dockerignore"
+    text = path.read_text(encoding="utf-8").replace(
+        "/examples/Record Layout/t06NNNNX.json\n", "", 1
+    )
+    path.write_text(text, encoding="utf-8")
+
+    errors = validate_release.validate_worktree(tmp_path)
+
+    assert any("generic layout override" in error.lower() for error in errors), errors
 
 
 def test_issue_template_version_examples_are_version_neutral() -> None:

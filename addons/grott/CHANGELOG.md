@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.1.11-beta - prepared 2026-07-14
+
+This is the preparation date, not a claim that the beta has been published. Check the GitHub Releases page for availability.
+
+- Resolve issue #6 by making the verified 32-entity `v0_1_9_standard` Home Assistant discovery map the safe default and keeping the 171-entity MOD map opt-in through `all`.
+- Preserve raw-packet handling, stable parser behavior and forwarding, and complete Home Assistant state data while applying the discovery-map change.
+- Clean up retained discovery safely across generic/MOD restarts and earlier `includeall=True` maps, preserve the verified built-in generic layout, correct release metadata, and document the Home Assistant Repairs and rollback gates for this prepared candidate.
+- Keep source-identical runtime and add-on images on the established non-root container path.
+
 ## 0.1.10-beta - prepared 2026-07-14
 
 This is the preparation date, not a claim that the beta has been published. Check the GitHub Releases page for availability.

@@ -34,15 +34,24 @@ export glayoutstrict="$(json_get layout_strict false)"
 export glayoutautofamily="$(json_get layout_auto_family true)"
 export gdiagnosticlogging="$(json_get diagnostic_logging false)"
 
+ha_entity_profile="$(json_get ha_entity_profile v0_1_9_standard)"
+case "$ha_entity_profile" in
+  v0_1_9_standard|all) ;;
+  *)
+    echo "invalid ha_entity_profile (expected v0_1_9_standard or all)" >&2
+    exit 2
+    ;;
+esac
+
 if [ "$(json_get ha_plugin true)" = "True" ]; then
   export gnomqtt=True
   export gextension=True
   export gextname=grottext.ha
-  export gextvar="$(python - "$OPTIONS" <<'PY'
+  export gextvar="$(python - "$OPTIONS" "$ha_entity_profile" <<'PY'
 import json
 import sys
 
-path = sys.argv[1]
+path, ha_entity_profile = sys.argv[1:3]
 try:
     with open(path, "r", encoding="utf-8") as handle:
         options = json.load(handle)
@@ -53,6 +62,7 @@ payload = {
     "ha_mqtt_host": options.get("mqtt_host", "core-mosquitto"),
     "ha_mqtt_port": int(options.get("mqtt_port", 1883)),
     "ha_mqtt_retain": bool(options.get("mqtt_retain", False)),
+    "ha_entity_profile": ha_entity_profile,
 }
 if options.get("mqtt_user"):
     payload["ha_mqtt_user"] = options.get("mqtt_user")

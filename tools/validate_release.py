@@ -36,7 +36,7 @@ EXPECTED_BUILD_IDS = {
 }
 EXPECTED_RELEASE_PREPARED_DATE = "2026-07-14"
 EXPECTED_GROTT_STARTUP_VERSION = "2.8.3"
-EXPECTED_HA_EXTENSION_VERSION = "0.0.7-rc2"
+EXPECTED_HA_EXTENSION_VERSION = "0.0.8"
 EXPECTED_RUNTIME_IMAGE = "ghcr.io/herbertmt978/grott"
 EXPECTED_ADDON_IMAGE = "ghcr.io/herbertmt978/grott-ha-docker"
 ROLLBACK_RUNTIME_DIGEST = (
@@ -244,6 +244,29 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
             "## Immutable release images" not in curated_notes,
             "curated release notes must not contain the reserved immutable image heading",
         )
+        curated_lower = curated_notes.lower()
+        required_note_tokens = (
+            "supported-availability authority",
+            "v0_1_9_standard",
+            "omitted option",
+            "next live packet",
+            "image rollback does not restore",
+            "home assistant repairs",
+            "changes carried forward from v0.1.10-beta",
+            "tcp frame reassembly",
+            "safe literal",
+            "non-root",
+            "exact-source annotated tags",
+            "upstream redistribution permission has been obtained",
+            "does not authorize commercial use or reuse unless johan meijer",
+            "financial reward or appreciation is directed to him",
+        )
+        require(
+            errors,
+            all(token in curated_lower for token in required_note_tokens)
+            and "has not been published" not in curated_lower,
+            "curated release notes must be cumulative, publication-neutral, and cover automatic cleanup, UAT, and permission boundaries",
+        )
     else:
         require(
             errors,
@@ -276,19 +299,24 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
         ),
         "RELEASING.md": read_required_text(root, Path("RELEASING.md"), errors),
         "docs/LEGAL.md": read_required_text(root, Path("docs/LEGAL.md"), errors),
+        ".dockerignore": read_required_text(root, Path(".dockerignore"), errors),
     }
     readme = texts["README.md"]
     addon_docs = texts["addons/grott/DOCS.md"]
     changelog = texts["addons/grott/CHANGELOG.md"]
     releasing = texts["RELEASING.md"]
     legal = texts["docs/LEGAL.md"]
+    dockerignore = texts[".dockerignore"]
 
     require(
         errors,
         f"current release candidate is `v{addon_version}`" in readme
         and f"/releases/tag/v{addon_version}" not in readme
         and f"{EXPECTED_RUNTIME_IMAGE}:{addon_version}" in readme
-        and "Releases page is the availability authority" in readme
+        and "latest supported release is `v0.1.9-beta`" in readme
+        and "`v0.1.10-beta` remains a prerelease" in readme
+        and "Releases page is the supported-availability authority" in readme
+        and "does not prove that GHCR tags are absent" in readme
         and "preparation examples only" in readme,
         "README current release and install image must match the release candidate",
     )
@@ -296,6 +324,11 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
         errors,
         f"Supported release candidate: `{addon_version}`" in addon_docs,
         "add-on operator docs must identify the supported release candidate",
+    )
+    require(
+        errors,
+        "/examples/Record Layout/t06NNNNX.json" in dockerignore,
+        "Docker build context must exclude the conflicting generic layout override",
     )
 
     version_tokens = (
@@ -434,6 +467,9 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
         "protected `v*` tag ruleset",
         "hosted CI",
         "Home Assistant UAT",
+        "Home Assistant Repairs",
+        "Docker-backed Home Assistant",
+        "retained MQTT",
         "workflow_dispatch",
         'RELEASE_REPO="Herbertmt978/grott"',
         '--repo "${RELEASE_REPO}"',
@@ -455,6 +491,7 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
         and "Preserve the permission record outside this repository" in legal
         and "does not authorize commercial use or reuse unless Johan Meijer" in legal
         and "financial reward or appreciation is directed to him" in legal
+        and "Redistribution permission alone does not authorize relicensing" in legal
         and "Public release still requires" in legal
         and "Local/private testing" in legal
         and "Publish Home Assistant and Docker images" not in legal,

@@ -1,0 +1,613 @@
+{
+  "source_image": "sha256:e9314693651e0cce82c603b53f88c66ae4757d93e09b97a24c56070c845d2351",
+  "source_release": "v0.1.9-beta",
+  "device": "GOLDEN_DEVICE",
+  "configs": [
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_datalogserial/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Datalogger serial",
+        "unique_id": "grott_GOLDEN_DEVICE_datalogserial",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "value_template": "{{ value_json.datalogserial }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvserial/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Serial",
+        "unique_id": "grott_GOLDEN_DEVICE_pvserial",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "value_template": "{{ value_json.pvserial }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvstatus/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE State",
+        "unique_id": "grott_GOLDEN_DEVICE_pvstatus",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "icon": "mdi:power-settings",
+        "value_template": "{{ value_json.pvstatus | float / None }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvpowerin/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE PV Input (Actual)",
+        "unique_id": "grott_GOLDEN_DEVICE_pvpowerin",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "power",
+        "unit_of_measurement": "W",
+        "value_template": "{{ value_json.pvpowerin | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pv1voltage/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE PV1 Voltage",
+        "unique_id": "grott_GOLDEN_DEVICE_pv1voltage",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "voltage",
+        "unit_of_measurement": "V",
+        "value_template": "{{ value_json.pv1voltage | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pv1current/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE PV1 Current",
+        "unique_id": "grott_GOLDEN_DEVICE_pv1current",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "current",
+        "unit_of_measurement": "A",
+        "value_template": "{{ value_json.pv1current | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pv1watt/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE PV1 Watt",
+        "unique_id": "grott_GOLDEN_DEVICE_pv1watt",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "power",
+        "unit_of_measurement": "W",
+        "value_template": "{{ value_json.pv1watt | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pv2voltage/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE PV2 Voltage",
+        "unique_id": "grott_GOLDEN_DEVICE_pv2voltage",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "voltage",
+        "unit_of_measurement": "V",
+        "value_template": "{{ value_json.pv2voltage | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pv2current/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE PV2 Current",
+        "unique_id": "grott_GOLDEN_DEVICE_pv2current",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "current",
+        "unit_of_measurement": "A",
+        "value_template": "{{ value_json.pv2current | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pv2watt/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE PV2 Watt",
+        "unique_id": "grott_GOLDEN_DEVICE_pv2watt",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "power",
+        "unit_of_measurement": "W",
+        "value_template": "{{ value_json.pv2watt | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvpowerout/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE PV Output (Actual)",
+        "unique_id": "grott_GOLDEN_DEVICE_pvpowerout",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "power",
+        "unit_of_measurement": "W",
+        "value_template": "{{ value_json.pvpowerout | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvfrequentie/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Grid frequency",
+        "unique_id": "grott_GOLDEN_DEVICE_pvfrequentie",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "frequency",
+        "unit_of_measurement": "Hz",
+        "icon": "mdi:waveform",
+        "value_template": "{{ value_json.pvfrequentie | float / 100 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvgridvoltage/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Phase 1 voltage",
+        "unique_id": "grott_GOLDEN_DEVICE_pvgridvoltage",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "voltage",
+        "unit_of_measurement": "V",
+        "value_template": "{{ value_json.pvgridvoltage | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvgridcurrent/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Phase 1 current",
+        "unique_id": "grott_GOLDEN_DEVICE_pvgridcurrent",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "current",
+        "unit_of_measurement": "A",
+        "value_template": "{{ value_json.pvgridcurrent | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvgridpower/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Phase 1 power",
+        "unique_id": "grott_GOLDEN_DEVICE_pvgridpower",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "power",
+        "unit_of_measurement": "W",
+        "value_template": "{{ value_json.pvgridpower | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvgridvoltage2/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Phase 2 voltage",
+        "unique_id": "grott_GOLDEN_DEVICE_pvgridvoltage2",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "voltage",
+        "unit_of_measurement": "V",
+        "value_template": "{{ value_json.pvgridvoltage2 | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvgridcurrent2/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Phase 2 current",
+        "unique_id": "grott_GOLDEN_DEVICE_pvgridcurrent2",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "current",
+        "unit_of_measurement": "A",
+        "value_template": "{{ value_json.pvgridcurrent2 | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvgridpower2/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Phase 2 power",
+        "unique_id": "grott_GOLDEN_DEVICE_pvgridpower2",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "power",
+        "unit_of_measurement": "W",
+        "value_template": "{{ value_json.pvgridpower2 | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvgridvoltage3/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Phase 3 voltage",
+        "unique_id": "grott_GOLDEN_DEVICE_pvgridvoltage3",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "voltage",
+        "unit_of_measurement": "V",
+        "value_template": "{{ value_json.pvgridvoltage3 | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvgridcurrent3/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Phase 3 current",
+        "unique_id": "grott_GOLDEN_DEVICE_pvgridcurrent3",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "current",
+        "unit_of_measurement": "A",
+        "value_template": "{{ value_json.pvgridcurrent3 | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvgridpower3/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Phase 3 power",
+        "unique_id": "grott_GOLDEN_DEVICE_pvgridpower3",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "power",
+        "unit_of_measurement": "W",
+        "value_template": "{{ value_json.pvgridpower3 | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_totworktime/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Working time",
+        "unique_id": "grott_GOLDEN_DEVICE_totworktime",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "device_class": "duration",
+        "unit_of_measurement": "hours",
+        "value_template": "{{ value_json.totworktime| float / 7200 | round(2) }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvenergytoday/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Generated energy (Today)",
+        "unique_id": "grott_GOLDEN_DEVICE_pvenergytoday",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "total",
+        "device_class": "energy",
+        "unit_of_measurement": "kWh",
+        "icon": "mdi:solar-power",
+        "value_template": "{{ value_json.pvenergytoday | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvenergytotal/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Generated energy (Total)",
+        "unique_id": "grott_GOLDEN_DEVICE_pvenergytotal",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "total_increasing",
+        "device_class": "energy",
+        "unit_of_measurement": "kWh",
+        "icon": "mdi:solar-power",
+        "value_template": "{{ value_json.pvenergytotal | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_epvtotal/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Generated PV energy (Total)",
+        "unique_id": "grott_GOLDEN_DEVICE_epvtotal",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "device_class": "energy",
+        "unit_of_measurement": "kWh",
+        "icon": "mdi:solar-power",
+        "state_class": "total",
+        "value_template": "{{ value_json.epvtotal | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_epv1today/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Solar PV1 production",
+        "unique_id": "grott_GOLDEN_DEVICE_epv1today",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "total",
+        "device_class": "energy",
+        "unit_of_measurement": "kWh",
+        "icon": "mdi:solar-power",
+        "value_template": "{{ value_json.epv1today | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_epv1total/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Solar PV1 production (Total)",
+        "unique_id": "grott_GOLDEN_DEVICE_epv1total",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "total",
+        "device_class": "energy",
+        "unit_of_measurement": "kWh",
+        "icon": "mdi:solar-power",
+        "value_template": "{{ value_json.epv1total | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_epv2today/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Solar PV2 production",
+        "unique_id": "grott_GOLDEN_DEVICE_epv2today",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "total",
+        "device_class": "energy",
+        "unit_of_measurement": "kWh",
+        "icon": "mdi:solar-power",
+        "value_template": "{{ value_json.epv2today | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_epv2total/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Solar PV2 production (Total)",
+        "unique_id": "grott_GOLDEN_DEVICE_epv2total",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "total",
+        "device_class": "energy",
+        "unit_of_measurement": "kWh",
+        "icon": "mdi:solar-power",
+        "value_template": "{{ value_json.epv2total | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvtemperature/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Inverter temperature",
+        "unique_id": "grott_GOLDEN_DEVICE_pvtemperature",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "state_class": "measurement",
+        "device_class": "temperature",
+        "unit_of_measurement": "\u00b0C",
+        "value_template": "{{ value_json.pvtemperature | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_pvipmtemperature/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE IPM temperature",
+        "unique_id": "grott_GOLDEN_DEVICE_pvipmtemperature",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "device_class": "temperature",
+        "unit_of_measurement": "\u00b0C",
+        "state_class": "measurement",
+        "value_template": "{{ value_json.pvipmtemperature | float / 10 }}"
+      }
+    },
+    {
+      "topic": "homeassistant/sensor/grott/GOLDEN_DEVICE_grott_last_push/config",
+      "payload": {
+        "name": "GOLDEN_DEVICE Grott last data push",
+        "unique_id": "grott_GOLDEN_DEVICE_grott_last_push",
+        "state_topic": "homeassistant/grott/GOLDEN_DEVICE/state",
+        "device": {
+          "identifiers": [
+            "GOLDEN_DEVICE"
+          ],
+          "name": "GOLDEN_DEVICE",
+          "manufacturer": "GroWatt"
+        },
+        "device_class": "timestamp",
+        "value_template": "{{value_json.grott_last_push}}",
+        "expire_after": 900
+      }
+    }
+  ]
+}

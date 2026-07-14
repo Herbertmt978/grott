@@ -6,9 +6,9 @@ This runbook prepares and verifies the fork's beta artifacts. It does not grant 
 
 | Version domain | Current value | Owner |
 | --- | --- | --- |
-| Fork/add-on release | `0.1.10-beta` / `v0.1.10-beta` | Canonical current version: `addons/grott/config.yaml`; the protected Git tag adds the `v` prefix. |
+| Fork/add-on release | `0.1.11-beta` / `v0.1.11-beta` | Canonical current version: `addons/grott/config.yaml`; the protected Git tag adds the `v` prefix. |
 | Bundled Grott core (upstream startup version) | `2.8.3` | `grott.py` (`verrel`) |
-| Bundled Home Assistant extension | `0.0.7-rc2` | `examples/Home Assistent/grott_ha.py` (`__version__`) |
+| Bundled Home Assistant extension | `0.0.8` | `examples/Home Assistent/grott_ha.py` (`__version__`) |
 
 The release images are `ghcr.io/herbertmt978/grott` and `ghcr.io/herbertmt978/grott-ha-docker`. Both must represent the same verified source SHA and the supported platforms `linux/amd64`, `linux/arm64`, `linux/arm/v7`, and `linux/386`.
 
@@ -29,7 +29,7 @@ The workflow's read-only control gate uses the hash-pinned `tools/verify_release
 - administrators are not allowed to bypass the `release` environment protection rules; and
 - the required `test` status context is supplied by the intended GitHub Actions integration.
 
-Record and check those settings immediately before dispatch. Do not start the workflow if they do not match the required state. The automated gate runs after dispatch and re-checks the controls available through GitHub's read-only API, but it cannot continuously verify the UI-only bypass settings. If the maintainer sees any control change before publication finishes, cancel the run. The latest read-only GitHub audit on 2026-07-14 found no rulesets, no environments, and an unprotected default branch. Those controls must be created and personally re-checked by the maintainer before any release; this document does not authorize changing them.
+Record and check those settings immediately before dispatch. Do not start the workflow if they do not match the required state. The automated gate runs after dispatch and re-checks the controls available through GitHub's read-only API, but it cannot continuously verify the UI-only bypass settings. If the maintainer sees any control change before publication finishes, cancel the run. The latest read-only GitHub audit on 2026-07-14 found active branch and `v*` tag rulesets plus a `release` environment restricted to protected branches. Their detailed rules and UI-only bypass settings must still be personally re-checked before any future release; this document does not authorize changing them.
 
 This model has one important residual risk: compromise of the sole maintainer account can authorize a release without a second person stopping it. Protect that account with strong two-factor authentication, preferably passkeys or hardware security keys, and keep active credentials and scoped tokens to the minimum needed for release work.
 
@@ -71,7 +71,7 @@ grep -F "version: ${VERSION}" addons/grott/config.yaml
 grep -F "ghcr.io/herbertmt978/grott:${VERSION}" docker/docker-compose.yml README.md
 grep -F "## ${VERSION} - prepared 2026-07-14" addons/grott/CHANGELOG.md
 grep -F 'verrel = "2.8.3"' grott.py
-grep -F '__version__ = "0.0.7-rc2"' 'examples/Home Assistent/grott_ha.py'
+grep -F '__version__ = "0.0.8"' 'examples/Home Assistent/grott_ha.py'
 ```
 
 `## Unreleased` must be empty. The candidate entry records its preparation date without claiming that publication has happened; the GitHub Releases page remains the availability authority. Confirm the add-on is still `stage: experimental`.
@@ -80,7 +80,7 @@ grep -F '__version__ = "0.0.7-rc2"' 'examples/Home Assistent/grott_ha.py'
 
 Do not treat local checks as a substitute for hosted CI. Before any tag, the exact `SOURCE_SHA` must have a green hosted CI run on the protected default branch.
 
-For private/local UAT before redistribution permission exists, build without pushing:
+For private/local pre-publication UAT, build without pushing:
 
 ```sh
 docker build --file docker/dockerfile \
@@ -100,14 +100,15 @@ Validate each local image as non-root with a read-only filesystem, `/tmp` tmpfs,
 
 Use a private test VM or explicitly authorized Home Assistant test window. Never replace the known-good service without the operator present and the rollback prepared.
 
-1. Create a full Home Assistant backup named **Grott pre-update rollback**, wait for completion, verify it is visible and contains the Grott add-on/configuration, and record its backup ID plus the current options. Without that verified backup, UAT must not begin.
+1. Create a full Home Assistant backup named **Grott pre-update rollback**, wait for completion, verify it is visible and covers the entity registry/configuration, and record its backup ID plus the current options. For Docker-backed Home Assistant or an external broker, also verify retained MQTT discovery is covered by the Home Assistant/Mosquitto backup or a separate broker snapshot. Without that verified recovery set, UAT must not begin.
 2. Record the current Docker/add-on image, configuration, datalogger target, MQTT broker target, and the process that owns TCP port `5279`.
 3. Stop the existing listener before starting the candidate; exactly one Grott service or forwarder may own port `5279`.
 4. Start the locally built candidate and confirm it becomes healthy without stderr errors.
 5. Wait for multiple live packets. Confirm `grott_last_push` advances and representative power, energy, battery, and temperature values remain plausible.
 6. Compare the same values with ShinePhone and confirm ShinePhone continues receiving fresh data through the proxy path.
-7. Restart the candidate once and confirm it recovers, republishes MQTT discovery without duplicate entities, and forwards packets normally.
-8. Stop immediately and follow **Rollback** if parsing, forwarding, MQTT output, health, or ShinePhone behavior regresses.
+7. Check Home Assistant Repairs before and after the test. Any new Grott unit, device-class, or statistics warning is a failed UAT result.
+8. Restart the candidate once and confirm it recovers, republishes MQTT discovery without duplicate entities, and forwards packets normally.
+9. Stop immediately and follow **Rollback** if parsing, forwarding, MQTT output, health, Home Assistant Repairs, or ShinePhone behavior regresses.
 
 Record the exact candidate image ID, source SHA, architecture, Home Assistant version, add-on options (with secrets redacted), test timestamps, and rollback result.
 
@@ -116,9 +117,9 @@ Record the exact candidate image ID, source SHA, architecture, Home Assistant ve
 Only after every hard gate passes and the owner explicitly authorizes publication:
 
 1. Reconfirm the release commit is the exact green hosted-CI SHA on the protected default branch.
-2. Create the annotated `v0.1.10-beta` tag under the protected `v*` ruleset and push only that tag.
+2. Create the annotated `v0.1.11-beta` tag under the protected `v*` ruleset and push only that tag.
 3. Verify the annotated tag structure and remote refs. The direct remote ref is the annotated tag-object SHA; the peeled remote ref is the release commit SHA, and they must differ. Exactly one of each ref must exist, and only the peeled ref may equal `SOURCE_SHA`.
-4. Reconfirm the protected default branch still resolves to `SOURCE_SHA`. Start `Publish GHCR images` manually with `workflow_dispatch`, selecting that protected default branch and passing `v0.1.10-beta` as the `tag` input. The workflow binds the tag to `${{ github.sha }}`, the exact protected workflow-dispatch commit, and fails if the branch moved to any other commit.
+4. Reconfirm the protected default branch still resolves to `SOURCE_SHA`. Start `Publish GHCR images` manually with `workflow_dispatch`, selecting that protected default branch and passing `v0.1.11-beta` as the `tag` input. The workflow binds the tag to `${{ github.sha }}`, the exact protected workflow-dispatch commit, and fails if the branch moved to any other commit.
 
 Example commands, to be run only with that authorization:
 
@@ -134,11 +135,11 @@ git ls-remote "${RELEASE_REMOTE}" "refs/tags/${TAG}" "refs/tags/${TAG}^{}"
 gh workflow run publish-ghcr.yml --repo "${RELEASE_REPO}" --ref "${DEFAULT_BRANCH}" -f tag="${TAG}"
 ```
 
-The workflow preserves the protected dispatch SHA before tag checkout, requires an annotated tag whose peeled commit equals that SHA exactly, verifies the live repository controls with a hash-pinned read-only gate, and requires the protected `release` environment. Before package login, final promotion, and prerelease creation, it queries GitHub's live repository identity and current default branch, requires the branch name to remain the one whose controls and CI passed the gate, requires that exact branch tip to match the source SHA, verifies one distinct direct tag-object ref with one matching peeled ref, and confirms the live repository state did not change during those checks. It stages source-SHA candidate manifests, validates and scans each platform by immutable digest, then promotes those digests to both `v0.1.10-beta` and `0.1.10-beta`. It never builds directly to a final release tag.
+The workflow preserves the protected dispatch SHA before tag checkout, requires an annotated tag whose peeled commit equals that SHA exactly, verifies the live repository controls with a hash-pinned read-only gate, and requires the protected `release` environment. Before package login, final promotion, and prerelease creation, it queries GitHub's live repository identity and current default branch, requires the branch name to remain the one whose controls and CI passed the gate, requires that exact branch tip to match the source SHA, verifies one distinct direct tag-object ref with one matching peeled ref, and confirms the live repository state did not change during those checks. It stages source-SHA candidate manifests, validates and scans each platform by immutable digest, then promotes those digests to both `v0.1.11-beta` and `0.1.11-beta`. It never builds directly to a final release tag.
 
 ## Human-written release notes
 
-The canonical public notes for this release are committed at `docs/releases/v0.1.10-beta.md`. They must be checked with the release commit and use plain language to explain the problem, the fix, why the problem mattered, and the benefit to users. The file must remain UTF-8, LF-only, non-empty, and must not contain the CI-owned `## Immutable release images` heading.
+The canonical public notes for this release are committed at `docs/releases/v0.1.11-beta.md`. They must be checked with the release commit and use plain language to explain the problem, the fix, why the problem mattered, and the benefit to users. The file must remain UTF-8, LF-only, non-empty, and must not contain the CI-owned `## Immutable release images` heading.
 
 At prerelease creation, the workflow fetches this file through the GitHub Contents API at the exact source SHA already proven by the protected annotated tag. It never reads notes from a mutable branch or generates replacement prose. CI constructs one deterministic body containing the verified runtime/add-on digests and four-platform line, followed by the exact human-written file, and passes that body through `--notes-file`.
 
@@ -170,7 +171,7 @@ The workflow is designed for an **Idempotent retry** of the same protected tag a
 - If every final reference is correct but prerelease creation failed, rerun the same workflow. Digest promotion and release creation are safe only when the existing values match exactly.
 - If any final tag points to a different digest, stop. Do not overwrite or delete it automatically. Preserve logs, compare the remote tag/source SHA, and obtain explicit owner approval for a documented recovery decision.
 
-Do not retag a different commit as `v0.1.10-beta`, force-push, delete a public package version, or edit release evidence to make a mismatch appear valid.
+Do not retag a different commit as `v0.1.11-beta`, force-push, delete a public package version, or edit release evidence to make a mismatch appear valid.
 
 ## Rollback
 
@@ -179,7 +180,7 @@ The independently verified previous beta is `0.1.9-beta`. On 2026-07-13, both it
 - Runtime: `ghcr.io/herbertmt978/grott@sha256:e9314693651e0cce82c603b53f88c66ae4757d93e09b97a24c56070c845d2351`
 - Home Assistant add-on: `ghcr.io/herbertmt978/grott-ha-docker@sha256:7c55c161195eccd5d93bd22576bee2ea2958f68a380087eb6694d103bcfafbb1`
 
-For Docker, restore the backed-up `grott.ini`, pin the runtime digest above, and recreate the container. For Home Assistant, the only supported rollback is to stop the candidate and restore the verified full backup named **Grott pre-update rollback** by its recorded backup ID; confirm the restored options before starting anything. In both cases, start exactly one listener on TCP `5279`, wait for fresh packets, confirm `grott_last_push`, compare values with ShinePhone, and confirm ShinePhone still updates.
+For Docker, restore the backed-up `grott.ini`, pin the runtime digest above, and recreate the container. A Docker-backed Home Assistant deployment must also restore its verified Home Assistant registry/configuration backup and retained MQTT snapshot; image rollback alone cannot reconstruct tombstoned discovery or statistics metadata. For the add-on, the only supported Home Assistant rollback path is to stop the candidate and restore the verified full backup named **Grott pre-update rollback** by its recorded backup ID. In both cases, start exactly one listener on TCP `5279`, wait for fresh packets, confirm `grott_last_push`, compare values with ShinePhone, confirm ShinePhone still updates, and verify Home Assistant Repairs returned to baseline.
 
 The previous add-on digest above is evidence that identifies the prior artifact. It does not make historical-version reinstall from the current add-on repository a supported rollback path. Without the named verified backup, Home Assistant UAT must not begin.
 

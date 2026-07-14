@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from importlib import import_module, metadata
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -18,6 +19,49 @@ from packaging.utils import canonicalize_name
 APP_DIR = Path("/app")
 VENV_SITE_PACKAGES = Path("/opt/venv/lib/python3.11/site-packages")
 EXPECTED_WHEEL_VERSION = "0.47.0"
+EXPECTED_GENERIC_LAYOUT = {
+    "datalogserial": {"value": 16, "length": 10, "type": "text", "incl": "yes"},
+    "pvserial": {"value": 76, "length": 10, "type": "text"},
+    "pvstatus": {"value": 158, "length": 2, "type": "num"},
+    "pvpowerin": {"value": 162, "length": 4, "type": "num", "divide": 10},
+    "pv1voltage": {"value": 170, "length": 2, "type": "num", "divide": 10},
+    "pv1current": {"value": 174, "length": 2, "type": "num", "divide": 10},
+    "pv1watt": {"value": 178, "length": 4, "type": "num", "divide": 10},
+    "pv2voltage": {"value": 186, "length": 2, "type": "num", "divide": 10},
+    "pv2current": {"value": 190, "length": 2, "type": "num", "divide": 10},
+    "pv2watt": {"value": 194, "length": 4, "type": "num", "divide": 10},
+    "pvpowerout": {"value": 250, "length": 4, "type": "numx", "divide": 10},
+    "pvfrequentie": {
+        "value": 258,
+        "length": 2,
+        "type": "num",
+        "divide": 100,
+    },
+    "pvgridvoltage": {"value": 262, "length": 2, "type": "num", "divide": 10},
+    "pvgridcurrent": {"value": 266, "length": 2, "type": "num", "divide": 10},
+    "pvgridpower": {"value": 270, "length": 4, "type": "num", "divide": 10},
+    "pvgridvoltage2": {"value": 278, "length": 2, "type": "num", "divide": 10},
+    "pvgridcurrent2": {"value": 282, "length": 2, "type": "num", "divide": 10},
+    "pvgridpower2": {"value": 286, "length": 4, "type": "num", "divide": 10},
+    "pvgridvoltage3": {"value": 294, "length": 2, "type": "num", "divide": 10},
+    "pvgridcurrent3": {"value": 298, "length": 2, "type": "num", "divide": 10},
+    "pvgridpower3": {"value": 302, "length": 4, "type": "num", "divide": 10},
+    "totworktime": {"value": 346, "length": 4, "type": "num", "divide": 7200},
+    "pvenergytoday": {"value": 354, "length": 4, "type": "num", "divide": 10},
+    "pvenergytotal": {"value": 362, "length": 4, "type": "num", "divide": 10},
+    "epvtotal": {"value": 370, "length": 4, "type": "num", "divide": 10},
+    "epv1today": {"value": 378, "length": 4, "type": "num", "divide": 10},
+    "epv1total": {"value": 386, "length": 4, "type": "num", "divide": 10},
+    "epv2today": {"value": 394, "length": 4, "type": "num", "divide": 10},
+    "epv2total": {"value": 402, "length": 4, "type": "num", "divide": 10},
+    "pvtemperature": {"value": 530, "length": 2, "type": "num", "divide": 10},
+    "pvipmtemperature": {
+        "value": 546,
+        "length": 2,
+        "type": "num",
+        "divide": 10,
+    },
+}
 
 
 class ArtifactValidationError(RuntimeError):
@@ -87,6 +131,7 @@ FORBIDDEN_PATHS = tuple(
         "/usr/local/lib/python3.11/site-packages/wheel",
         "/usr/local/lib/python3.11/site-packages/_distutils_hack",
         "/usr/local/lib/python3.11/site-packages/distutils-precedence.pth",
+        "/app/t06NNNNX.json",
     )
 )
 
@@ -117,6 +162,26 @@ def external_layout_payloads() -> list[Path]:
         if path.is_file()
         and path.suffix == ".json"
         and path.name[:1] in {"T", "t"}
+    )
+
+
+def assert_generic_layout_contract(recorddict: dict[str, Any]) -> None:
+    layout = recorddict.get("T06NNNNX")
+    require(isinstance(layout, dict), "generic T06NNNNX layout is missing")
+    actual = {
+        key: {
+            field: entry[field]
+            for field in ("value", "length", "type", "divide", "incl")
+            if field in entry
+        }
+        for key, entry in layout.items()
+        if isinstance(entry, dict)
+        and "length" in entry
+        and entry.get("incl") != "no"
+    }
+    require(
+        actual == EXPECTED_GENERIC_LAYOUT,
+        "generic T06NNNNX layout does not match the verified 31-field contract",
     )
 
 
@@ -225,6 +290,17 @@ def main() -> int:
     for layout_path in layout_payloads:
         with layout_path.open(encoding="utf-8") as handle:
             json.load(handle)
+
+    grottconf = import_module("grottconf")
+    conf = grottconf.Conf.__new__(grottconf.Conf)
+    conf.verbose = False
+    previous_cwd = Path.cwd()
+    try:
+        os.chdir(APP_DIR)
+        conf.set_reclayouts()
+    finally:
+        os.chdir(previous_cwd)
+    assert_generic_layout_contract(conf.recorddict)
 
     assert_wheel_contract()
     distributions = list(metadata.distributions(path=[str(VENV_SITE_PACKAGES)]))

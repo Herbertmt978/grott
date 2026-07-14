@@ -96,6 +96,36 @@ def test_artifact_policy_covers_complete_modules_payload_and_removed_tooling():
     assert "/opt/venv/bin/wheel" in {
         path.as_posix() for path in validate_container_artifact.FORBIDDEN_PATHS
     }
+    assert "/app/t06NNNNX.json" in {
+        path.as_posix() for path in validate_container_artifact.FORBIDDEN_PATHS
+    }
+    generic = validate_container_artifact.EXPECTED_GENERIC_LAYOUT
+    assert len(generic) == 31
+    assert generic["pvpowerout"] == {
+        "value": 250,
+        "length": 4,
+        "type": "numx",
+        "divide": 10,
+    }
+    assert generic["pvipmtemperature"]["value"] == 546
+
+
+def test_generic_layout_contract_rejects_sparse_or_semantically_changed_override():
+    correct = {
+        "T06NNNNX": {
+            key: dict(spec)
+            for key, spec in validate_container_artifact.EXPECTED_GENERIC_LAYOUT.items()
+        }
+    }
+    validate_container_artifact.assert_generic_layout_contract(correct)
+
+    del correct["T06NNNNX"]["pvgridcurrent"]
+    correct["T06NNNNX"]["pvpowerout"]["type"] = "num"
+    with pytest.raises(
+        validate_container_artifact.ArtifactValidationError,
+        match="generic T06NNNNX layout",
+    ):
+        validate_container_artifact.assert_generic_layout_contract(correct)
 
 
 def test_artifact_validator_parses_every_external_layout_payload(tmp_path, monkeypatch):

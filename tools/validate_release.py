@@ -425,8 +425,10 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
     )
 
     release_gate_tokens = (
-        "No public redistribution release",
-        "johanmeijer/grott#512",
+        "upstream redistribution permission has been obtained",
+        "Preserve the permission record outside this repository",
+        "does not authorize commercial use or reuse unless Johan Meijer",
+        "financial reward or appreciation is directed to him",
         "protected default branch",
         "protected `release` environment",
         "protected `v*` tag ruleset",
@@ -445,15 +447,18 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
     require(
         errors,
         all(token in releasing for token in release_gate_tokens),
-        "RELEASING.md is missing a required release, recovery, or public redistribution release gate",
+        "RELEASING.md is missing a required release, recovery, permission, or commercial-use gate",
     )
     require(
         errors,
-        "No public redistribution release" in legal
-        and "explicit licence or written redistribution permission" in legal
+        "upstream redistribution permission has been obtained" in legal
+        and "Preserve the permission record outside this repository" in legal
+        and "does not authorize commercial use or reuse unless Johan Meijer" in legal
+        and "financial reward or appreciation is directed to him" in legal
+        and "Public release still requires" in legal
         and "Local/private testing" in legal
         and "Publish Home Assistant and Docker images" not in legal,
-        "docs/LEGAL.md must block public redistribution while allowing private testing",
+        "docs/LEGAL.md must record redistribution permission and commercial-use limits while preserving release gates",
     )
 
     issue_dir = root / ".github" / "ISSUE_TEMPLATE"

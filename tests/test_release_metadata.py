@@ -218,8 +218,10 @@ def test_release_runbook_records_every_hard_gate_and_recovery_path() -> None:
     text = path.read_text(encoding="utf-8")
 
     for required in (
-        "No public redistribution release",
-        "johanmeijer/grott#512",
+        "upstream redistribution permission has been obtained",
+        "Preserve the permission record outside this repository",
+        "does not authorize commercial use or reuse unless Johan Meijer",
+        "financial reward or appreciation is directed to him",
         "protected default branch",
         "protected `release` environment",
         "protected `v*` tag ruleset",
@@ -242,11 +244,14 @@ def test_release_runbook_records_every_hard_gate_and_recovery_path() -> None:
         assert required in text
 
 
-def test_legal_status_blocks_public_redistribution_but_allows_private_testing() -> None:
+def test_legal_status_records_permission_and_commercial_use_limit() -> None:
     legal = (ROOT / "docs/LEGAL.md").read_text(encoding="utf-8")
 
-    assert "No public redistribution release" in legal
-    assert "explicit licence or written redistribution permission" in legal
+    assert "upstream redistribution permission has been obtained" in legal
+    assert "Preserve the permission record outside this repository" in legal
+    assert "does not authorize commercial use or reuse unless Johan Meijer" in legal
+    assert "financial reward or appreciation is directed to him" in legal
+    assert "Public release still requires" in legal
     assert "Local/private testing" in legal
     assert "Publish Home Assistant and Docker images" not in legal
 
@@ -394,10 +399,12 @@ def test_release_validator_rejects_missing_publication_gate(tmp_path: Path) -> N
     releasing_path = tmp_path / "RELEASING.md"
     if releasing_path.exists():
         text = releasing_path.read_text(encoding="utf-8").replace(
-            "No public redistribution release", "No release", 1
+            "upstream redistribution permission has been obtained",
+            "upstream permission is assumed",
+            1,
         )
         releasing_path.write_text(text, encoding="utf-8")
 
     errors = validate_release.validate_worktree(tmp_path)
 
-    assert any("public redistribution release gate" in error for error in errors)
+    assert any("permission" in error for error in errors)

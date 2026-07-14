@@ -109,6 +109,17 @@ FORBIDDEN_APK_PACKAGES = (
 )
 
 
+def external_layout_payloads() -> list[Path]:
+    """Return the external layout files Grott will auto-load from /app."""
+    return sorted(
+        path
+        for path in APP_DIR.iterdir()
+        if path.is_file()
+        and path.suffix == ".json"
+        and path.name[:1] in {"T", "t"}
+    )
+
+
 def dependency_closure_errors(distributions: Iterable[Any]) -> list[str]:
     """Return unsatisfied active distribution requirements."""
     installed_distributions = list(distributions)
@@ -204,8 +215,15 @@ def main() -> int:
         not missing_payloads,
         f"required runtime payload is missing: {missing_payloads}",
     )
-    for layout_name in ("T06NNNNXMOD.json", "t060103xmax3.json", "T06221b.json"):
-        with (APP_DIR / layout_name).open(encoding="utf-8") as handle:
+    layout_payloads = external_layout_payloads()
+    layout_names = {path.name for path in layout_payloads}
+    required_layouts = {"T06NNNNXMOD.json", "t060103xmax3.json", "T06221b.json"}
+    require(
+        required_layouts.issubset(layout_names),
+        f"required external layout payload is missing: {sorted(required_layouts - layout_names)}",
+    )
+    for layout_path in layout_payloads:
+        with layout_path.open(encoding="utf-8") as handle:
             json.load(handle)
 
     assert_wheel_contract()

@@ -98,6 +98,24 @@ def test_artifact_policy_covers_complete_modules_payload_and_removed_tooling():
     }
 
 
+def test_artifact_validator_parses_every_external_layout_payload(tmp_path, monkeypatch):
+    monkeypatch.setattr(validate_container_artifact, "APP_DIR", tmp_path)
+
+    for name in ("T06NNNNXMOD.json", "t060103xmax3.json", "T06221b.json"):
+        (tmp_path / name).write_text('{"layout": {}}', encoding="utf-8")
+    (tmp_path / "t_bad.json").write_text('{"layout": }', encoding="utf-8")
+    (tmp_path / "not-a-layout.json").write_text("not json", encoding="utf-8")
+
+    payloads = validate_container_artifact.external_layout_payloads()
+
+    assert {path.name for path in payloads} == {
+        "T06221b.json",
+        "T06NNNNXMOD.json",
+        "t060103xmax3.json",
+        "t_bad.json",
+    }
+
+
 def test_artifact_validator_has_no_optimization_disableable_assertions():
     source_path = Path(validate_container_artifact.__file__)
     tree = ast.parse(source_path.read_text(encoding="utf-8"))

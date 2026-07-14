@@ -58,6 +58,8 @@ REQUIRED_PAYLOADS = tuple(
         "grott.ini",
         "grott_ha.py",
         "T06NNNNXMOD.json",
+        "t060103xmax3.json",
+        "T06221b.json",
     )
 ) + (
     Path("/usr/local/bin/container_healthcheck.py"),
@@ -202,8 +204,9 @@ def main() -> int:
         not missing_payloads,
         f"required runtime payload is missing: {missing_payloads}",
     )
-    with (APP_DIR / "T06NNNNXMOD.json").open(encoding="utf-8") as handle:
-        json.load(handle)
+    for layout_name in ("T06NNNNXMOD.json", "t060103xmax3.json", "T06221b.json"):
+        with (APP_DIR / layout_name).open(encoding="utf-8") as handle:
+            json.load(handle)
 
     assert_wheel_contract()
     distributions = list(metadata.distributions(path=[str(VENV_SITE_PACKAGES)]))

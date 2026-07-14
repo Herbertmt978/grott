@@ -80,7 +80,14 @@ def test_artifact_policy_covers_complete_modules_payload_and_removed_tooling():
         "grottext.ha",
         "grott_ha",
     }
-    assert {"grott.py", "grott.ini", "grott_ha.py", "T06NNNNXMOD.json"}.issubset(
+    assert {
+        "grott.py",
+        "grott.ini",
+        "grott_ha.py",
+        "T06NNNNXMOD.json",
+        "t060103xmax3.json",
+        "T06221b.json",
+    }.issubset(
         {path.name for path in validate_container_artifact.REQUIRED_PAYLOADS}
     )
     assert {"gcc", "g++", "cc", "make"}.issubset(

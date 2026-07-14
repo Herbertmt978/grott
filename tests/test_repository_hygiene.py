@@ -134,9 +134,11 @@ def test_docker_context_keeps_every_required_build_input():
         "requirements.lock",
         "examples/grott.ini",
         "examples/Home Assistent/grott_ha.py",
+        "examples/Record Layout/t060103xmax3.json",
+        "examples/Record Layout/T06221b.json",
+        "examples/Record Layout/T06NNNNXMOD.json",
         "tools/container_healthcheck.py",
         "tools/validate_container_artifact.py",
-        "T06NNNNXMOD.json",
     ):
         assert not docker_context_ignores(path), f"required build input ignored: {path}"
 

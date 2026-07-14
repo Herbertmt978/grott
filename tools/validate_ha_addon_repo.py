@@ -194,8 +194,8 @@ def validate_files(errors: list[str]) -> None:
     )
     require(
         errors,
-        "COPY T06NNNNXMOD.json /app/T06NNNNXMOD.json" in dockerfile,
-        "Dockerfile must include the root external-layout fixture",
+        'COPY ["examples/Record Layout/", "/app/"]' in dockerfile,
+        "Dockerfile must include bundled external layout JSON files",
     )
     require(
         errors,

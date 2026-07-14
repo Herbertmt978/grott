@@ -105,7 +105,7 @@ def test_images_build_only_from_reviewed_root_context_and_copy_identical_sources
         assert "COPY grottext /app/grottext" in dockerfile
         assert "COPY examples/grott.ini /app/grott.ini" in dockerfile
         assert 'COPY ["examples/Home Assistent/grott_ha.py", "/app/grott_ha.py"]' in dockerfile
-        assert "COPY T06NNNNXMOD.json /app/T06NNNNXMOD.json" in dockerfile
+        assert 'COPY ["examples/Record Layout/", "/app/"]' in dockerfile
         assert "COPY tools/container_healthcheck.py /usr/local/bin/container_healthcheck.py" in dockerfile
         assert "COPY tools/validate_container_artifact.py /usr/local/bin/validate_container_artifact.py" in dockerfile
 

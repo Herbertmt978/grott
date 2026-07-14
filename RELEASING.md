@@ -12,9 +12,7 @@ This runbook prepares and verifies the fork's beta artifacts. It does not grant 
 
 The release images are `ghcr.io/herbertmt978/grott` and `ghcr.io/herbertmt978/grott-ha-docker`. Both must represent the same verified source SHA and the supported platforms `linux/amd64`, `linux/arm64`, `linux/arm/v7`, and `linux/386`.
 
-## Hard gates
-
-**No public redistribution release is permitted until the upstream maintainer supplies an explicit licence or written redistribution permission.** Upstream currently has no repository licence and the request in [johanmeijer/grott#512](https://github.com/johanmeijer/grott/issues/512) remains the authority to re-check. Local/private testing may continue without publishing images or tags.
+On 2026-07-14, the fork owner confirmed that upstream redistribution permission has been obtained. Preserve the permission record outside this repository unless upstream publishes an explicit repository licence.
 
 Every item below is fail-closed. A missing, ambiguous, or failing item stops the release:
 

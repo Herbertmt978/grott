@@ -1,0 +1,410 @@
+from __future__ import annotations
+
+import re
+import shutil
+from pathlib import Path
+
+import pytest
+import yaml
+
+from tools import validate_ha_addon_repo
+from tools import validate_release
+
+
+ROOT = Path(__file__).resolve().parents[1]
+RELEASE_PREPARED_DATE = "2026-07-14"
+ROLLBACK_RUNTIME_DIGEST = (
+    "sha256:e9314693651e0cce82c603b53f88c66ae4757d93e09b97a24c56070c845d2351"
+)
+ROLLBACK_ADDON_DIGEST = (
+    "sha256:7c55c161195eccd5d93bd22576bee2ea2958f68a380087eb6694d103bcfafbb1"
+)
+
+
+def canonical_release_version(root: Path = ROOT) -> str:
+    config = yaml.safe_load(
+        (root / "addons/grott/config.yaml").read_text(encoding="utf-8")
+    )
+    return str(config["version"])
+
+
+def curated_release_notes_path(root: Path = ROOT) -> Path:
+    return root / "docs" / "releases" / f"v{canonical_release_version(root)}.md"
+
+
+def copy_release_metadata(destination: Path) -> None:
+    for directory in (".github", "addons", "docker", "docs", "examples"):
+        ignore = shutil.ignore_patterns("aegis") if directory == "docs" else None
+        shutil.copytree(ROOT / directory, destination / directory, ignore=ignore)
+    for filename in ("README.md", "grott.py"):
+        shutil.copy2(ROOT / filename, destination / filename)
+    releasing = ROOT / "RELEASING.md"
+    if releasing.exists():
+        shutil.copy2(releasing, destination / releasing.name)
+    tools_dir = destination / "tools"
+    tools_dir.mkdir(exist_ok=True)
+    shutil.copy2(
+        ROOT / "tools" / "verify_release_controls.py",
+        tools_dir / "verify_release_controls.py",
+    )
+
+
+def test_current_release_metadata_is_aligned() -> None:
+    config = yaml.safe_load(
+        (ROOT / "addons/grott/config.yaml").read_text(encoding="utf-8")
+    )
+    compose = yaml.safe_load(
+        (ROOT / "docker/docker-compose.yml").read_text(encoding="utf-8")
+    )
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    addon_docs = (ROOT / "addons/grott/DOCS.md").read_text(encoding="utf-8")
+    release_version = canonical_release_version()
+
+    assert re.fullmatch(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", release_version)
+    assert config["stage"] == "experimental"
+    assert compose["services"]["grott"]["image"] == (
+        f"ghcr.io/herbertmt978/grott:{release_version}"
+    )
+    assert f"current release candidate is `v{release_version}`" in readme
+    assert f"docs/releases/v{release_version}.md" in readme
+    assert f"/releases/tag/v{release_version}" not in readme
+    assert f"ghcr.io/herbertmt978/grott:{release_version}" in readme
+    assert f"Supported release candidate: `{release_version}`" in addon_docs
+    assert "Releases page is the availability authority" in readme
+    assert "preparation examples only" in readme
+
+
+def test_changelog_has_empty_unreleased_then_prepared_candidate() -> None:
+    changelog = (ROOT / "addons/grott/CHANGELOG.md").read_text(encoding="utf-8")
+    release_version = canonical_release_version()
+
+    assert re.search(
+        rf"^## Unreleased\s*^## {re.escape(release_version)} - prepared {RELEASE_PREPARED_DATE}$",
+        changelog,
+        re.MULTILINE,
+    )
+    release_section = changelog.split(
+        f"## {release_version} - prepared {RELEASE_PREPARED_DATE}", 1
+    )[1].split("\n## ", 1)[0]
+    assert "source-identical" in release_section
+    assert "non-root" in release_section
+    assert "parser" in release_section.lower()
+    assert "not a claim that the beta has been published" in release_section
+
+
+def test_support_docs_require_packet_identifier_pseudonymisation() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    addon_docs = (ROOT / "addons/grott/DOCS.md").read_text(encoding="utf-8")
+
+    assert "never post raw packet hex unchanged" in readme
+    assert "stable device identifiers" in readme
+    assert "Always pseudonymise serial numbers" in addon_docs
+
+
+def test_curated_release_notes_are_human_written_and_versioned() -> None:
+    path = curated_release_notes_path()
+
+    assert path.is_file(), f"missing curated release notes: {path.relative_to(ROOT)}"
+    payload = path.read_bytes()
+    assert payload.endswith(b"\n")
+    assert b"\r" not in payload
+    assert b"\x00" not in payload
+
+    text = payload.decode("utf-8")
+    release_version = canonical_release_version()
+    assert text.startswith(f"# Grott {release_version}\n")
+    assert "## Immutable release images" not in text
+    attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+    assert "docs/releases/*.md text eol=lf" in attributes
+    for label in (
+        "**What was the problem?**",
+        "**What did we do?**",
+        "**Why was it a problem?**",
+        "**Benefit to users:**",
+    ):
+        assert text.count(label) >= 6
+    for user_topic in (
+        "layout",
+        "forwarding",
+        "Home Assistant",
+        "configuration",
+        "containers",
+        "release process",
+        "XML",
+    ):
+        assert user_topic.lower() in text.lower()
+
+
+def test_packaged_release_is_honest_about_proxy_only_mode_support() -> None:
+    notes = curated_release_notes_path().read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "moved that setup to the standard Docker image" not in notes
+    assert "packaged Docker profiles support proxy mode only" in notes
+    assert "do not upgrade either packaged image" in notes
+    assert "v0.1.10-beta images and supplied Compose profile" in readme
+    assert "qualified for proxy mode only" in readme
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_error"),
+    (
+        (None, "curated release notes"),
+        (b"   \n", "curated release notes"),
+        (b"# Notes\r\n", "LF-only"),
+        (b"# Notes\x00\n", "NUL"),
+        (b"# Notes\n\n## Immutable release images\n", "reserved"),
+    ),
+)
+def test_release_validator_rejects_invalid_curated_notes(
+    tmp_path: Path,
+    payload: bytes | None,
+    expected_error: str,
+) -> None:
+    copy_release_metadata(tmp_path)
+    path = curated_release_notes_path(tmp_path)
+    if path.exists():
+        path.unlink()
+    if payload is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+
+    errors = validate_release.validate_worktree(tmp_path)
+
+    assert any(expected_error.lower() in error.lower() for error in errors), errors
+
+
+def test_current_docs_distinguish_the_three_version_domains() -> None:
+    release_version = canonical_release_version()
+    for path in (ROOT / "README.md", ROOT / "addons/grott/DOCS.md"):
+        text = path.read_text(encoding="utf-8")
+        assert "Fork/add-on release" in text and release_version in text
+        assert "Bundled Grott core (upstream startup version)" in text
+        assert "2.8.3" in text
+        assert "Bundled Home Assistant extension" in text and "0.0.7-rc2" in text
+
+
+def test_operator_docs_cover_runtime_filesystem_constraints_and_rollback() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    addon_docs = (ROOT / "addons/grott/DOCS.md").read_text(encoding="utf-8")
+    releasing_path = ROOT / "RELEASING.md"
+
+    assert releasing_path.exists(), "RELEASING.md must define the release runbook"
+    releasing = releasing_path.read_text(encoding="utf-8")
+    assert "UID/GID `10001:10001`" in readme
+    assert "readable by UID `10001`" in readme
+    assert "read_only: false" in readme
+    assert "optional file output" in readme
+    assert "Backup" in addon_docs and "grott_last_push" in addon_docs
+    assert "ShinePhone" in addon_docs
+    for text in (readme, addon_docs, releasing):
+        assert "Grott pre-update rollback" in text
+        assert "UAT must not begin" in text
+        assert not re.search(
+            r"reinstall(?:ing)?(?: the)? add-on(?: version)? `?0\.1\.9-beta",
+            text,
+        )
+    for text in (readme, addon_docs, releasing):
+        assert "0.1.9-beta" in text
+    assert ROLLBACK_RUNTIME_DIGEST in readme
+    assert ROLLBACK_ADDON_DIGEST in addon_docs
+    assert ROLLBACK_RUNTIME_DIGEST in releasing
+    assert ROLLBACK_ADDON_DIGEST in releasing
+
+
+def test_release_runbook_records_every_hard_gate_and_recovery_path() -> None:
+    path = ROOT / "RELEASING.md"
+    assert path.exists(), "RELEASING.md must define the release runbook"
+    text = path.read_text(encoding="utf-8")
+
+    for required in (
+        "upstream redistribution permission has been obtained",
+        "Preserve the permission record outside this repository",
+        "does not authorize commercial use or reuse unless Johan Meijer",
+        "financial reward or appreciation is directed to him",
+        "protected default branch",
+        "protected `release` environment",
+        "protected `v*` tag ruleset",
+        "hosted CI",
+        "Home Assistant UAT",
+        "workflow_dispatch",
+        "digest",
+        "docs/releases/v0.1.10-beta.md",
+        "human-written",
+        "exact source SHA",
+        "exact full body",
+        "linux/amd64",
+        "linux/arm64",
+        "linux/arm/v7",
+        "linux/386",
+        "Idempotent retry",
+        "Recovery",
+        "Rollback",
+    ):
+        assert required in text
+
+
+def test_legal_status_records_permission_and_commercial_use_limit() -> None:
+    legal = (ROOT / "docs/LEGAL.md").read_text(encoding="utf-8")
+
+    assert "upstream redistribution permission has been obtained" in legal
+    assert "Preserve the permission record outside this repository" in legal
+    assert "does not authorize commercial use or reuse unless Johan Meijer" in legal
+    assert "financial reward or appreciation is directed to him" in legal
+    assert "Public release still requires" in legal
+    assert "Local/private testing" in legal
+    assert "Publish Home Assistant and Docker images" not in legal
+
+
+def test_issue_template_version_examples_are_version_neutral() -> None:
+    template_paths = sorted((ROOT / ".github/ISSUE_TEMPLATE").glob("*.yml"))
+    assert template_paths
+    version_example = re.compile(
+        r"placeholder:\s*['\"]?v?\d+\.\d+\.(?:\d+|[xX])"
+    )
+
+    stale = [
+        path.name
+        for path in template_paths
+        if version_example.search(path.read_text(encoding="utf-8"))
+    ]
+    assert not stale, f"version-specific issue placeholders: {stale}"
+
+
+def test_ha_validator_accepts_any_semverish_candidate_version(
+    monkeypatch,
+) -> None:
+    config = yaml.safe_load(
+        (ROOT / "addons/grott/config.yaml").read_text(encoding="utf-8")
+    )
+    config["version"] = "9.9.9-beta"
+    config["stage"] = "experimental"
+    monkeypatch.setattr(validate_ha_addon_repo, "load_yaml", lambda _path: config)
+    errors: list[str] = []
+
+    validate_ha_addon_repo.validate_addon_config(errors)
+
+    assert not any("version" in error.lower() for error in errors)
+
+
+def test_ha_validator_requires_experimental_stage(monkeypatch) -> None:
+    config = yaml.safe_load(
+        (ROOT / "addons/grott/config.yaml").read_text(encoding="utf-8")
+    )
+    config["stage"] = "stable"
+    monkeypatch.setattr(validate_ha_addon_repo, "load_yaml", lambda _path: config)
+    errors: list[str] = []
+
+    validate_ha_addon_repo.validate_addon_config(errors)
+
+    assert any("experimental" in error for error in errors)
+
+
+def test_release_validator_rejects_compose_version_drift(tmp_path: Path) -> None:
+    copy_release_metadata(tmp_path)
+    release_version = canonical_release_version(tmp_path)
+    compose_path = tmp_path / "docker/docker-compose.yml"
+    compose = compose_path.read_text(encoding="utf-8").replace(
+        f"grott:{release_version}", "grott:9.9.9-beta"
+    )
+    compose_path.write_text(compose, encoding="utf-8")
+
+    errors = validate_release.validate_worktree(tmp_path)
+
+    assert any("Compose runtime image" in error for error in errors)
+
+
+def test_release_validator_requires_named_verified_ha_backup(tmp_path: Path) -> None:
+    copy_release_metadata(tmp_path)
+    readme_path = tmp_path / "README.md"
+    readme_path.write_text(
+        readme_path.read_text(encoding="utf-8").replace(
+            "Grott pre-update rollback", "an unnamed backup"
+        ),
+        encoding="utf-8",
+    )
+
+    errors = validate_release.validate_worktree(tmp_path)
+
+    assert any("named verified Home Assistant backup" in error for error in errors)
+
+
+def test_release_validator_rejects_historical_addon_reinstall_rollback(
+    tmp_path: Path,
+) -> None:
+    copy_release_metadata(tmp_path)
+    addon_docs_path = tmp_path / "addons/grott/DOCS.md"
+    addon_docs_path.write_text(
+        addon_docs_path.read_text(encoding="utf-8")
+        + "\nRollback by reinstalling add-on version `0.1.9-beta`.\n",
+        encoding="utf-8",
+    )
+
+    errors = validate_release.validate_worktree(tmp_path)
+
+    assert any("historical add-on reinstall" in error for error in errors)
+
+
+def test_release_validator_derives_current_version_from_addon_config(
+    tmp_path: Path,
+) -> None:
+    copy_release_metadata(tmp_path)
+    old_version = canonical_release_version(tmp_path)
+    new_version = "9.8.7-beta"
+    config_path = tmp_path / "addons/grott/config.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["version"] = new_version
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    old_notes_path = tmp_path / "docs" / "releases" / f"v{old_version}.md"
+    new_notes_path = tmp_path / "docs" / "releases" / f"v{new_version}.md"
+    new_notes_path.write_text(
+        old_notes_path.read_text(encoding="utf-8").replace(old_version, new_version),
+        encoding="utf-8",
+        newline="\n",
+    )
+    old_notes_path.unlink()
+    for relative_path in (
+        "README.md",
+        "RELEASING.md",
+        "addons/grott/DOCS.md",
+        "addons/grott/CHANGELOG.md",
+        "docker/docker-compose.yml",
+    ):
+        path = tmp_path / relative_path
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(old_version, new_version),
+            encoding="utf-8",
+        )
+
+    errors = validate_release.validate_worktree(tmp_path, f"v{new_version}")
+
+    assert not errors
+
+
+def test_release_validator_rejects_nonempty_unreleased_section(tmp_path: Path) -> None:
+    copy_release_metadata(tmp_path)
+    changelog_path = tmp_path / "addons/grott/CHANGELOG.md"
+    changelog = changelog_path.read_text(encoding="utf-8").replace(
+        "## Unreleased\n\n", "## Unreleased\n\n- Not yet released.\n\n", 1
+    )
+    changelog_path.write_text(changelog, encoding="utf-8")
+
+    errors = validate_release.validate_worktree(tmp_path)
+
+    assert any("Unreleased section must be empty" in error for error in errors)
+
+
+def test_release_validator_rejects_missing_publication_gate(tmp_path: Path) -> None:
+    copy_release_metadata(tmp_path)
+    releasing_path = tmp_path / "RELEASING.md"
+    if releasing_path.exists():
+        text = releasing_path.read_text(encoding="utf-8").replace(
+            "upstream redistribution permission has been obtained",
+            "upstream permission is assumed",
+            1,
+        )
+        releasing_path.write_text(text, encoding="utf-8")
+
+    errors = validate_release.validate_worktree(tmp_path)
+
+    assert any("permission" in error for error in errors)

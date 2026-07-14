@@ -1,0 +1,4 @@
+addons/grott/run.sh text eol=lf
+docs/releases/*.md text eol=lf
+tools/verify_release_controls.py text eol=lf
+grottproxy.py whitespace=cr-at-eol

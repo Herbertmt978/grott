@@ -24,7 +24,7 @@ body:
     id: version
     attributes:
       label: Grott version or image tag
-      placeholder: 0.1.6-beta
+      placeholder: Copy the exact tag or digest shown by your install
     validations:
       required: true
   - type: input

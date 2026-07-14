@@ -1,7 +1,8 @@
 #!/usr/bin/env sh
 set -eu
 
-OPTIONS=/data/options.json
+OPTIONS="${OPTIONS:-/data/options.json}"
+GROTT_RUNNER="${GROTT_RUNNER:-python}"
 
 json_get() {
   python - "$OPTIONS" "$1" "$2" <<'PY'
@@ -17,6 +18,8 @@ except FileNotFoundError:
 value = data.get(key, default)
 if isinstance(value, bool):
     print("True" if value else "False")
+elif isinstance(value, str) and value.strip().lower() in {"true", "false"}:
+    print("True" if value.strip().lower() == "true" else "False")
 else:
     print(value)
 PY
@@ -32,6 +35,7 @@ export glayoutautofamily="$(json_get layout_auto_family true)"
 export gdiagnosticlogging="$(json_get diagnostic_logging false)"
 
 if [ "$(json_get ha_plugin true)" = "True" ]; then
+  export gnomqtt=True
   export gextension=True
   export gextname=grottext.ha
   export gextvar="$(python - "$OPTIONS" <<'PY'
@@ -54,9 +58,13 @@ if options.get("mqtt_user"):
     payload["ha_mqtt_user"] = options.get("mqtt_user")
     payload["ha_mqtt_password"] = options.get("mqtt_password", "")
 
-print(repr(payload))
+print(json.dumps(payload, separators=(",", ":")))
 PY
 )"
 fi
 
-exec python -u /app/grott.py -v
+if [ "$(id -u)" -eq 0 ]; then
+  exec su-exec grott:grott "$GROTT_RUNNER" -u /app/grott.py -v
+fi
+
+exec "$GROTT_RUNNER" -u /app/grott.py -v

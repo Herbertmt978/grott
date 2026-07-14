@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+## 0.1.10-beta - prepared 2026-07-14
+
+This is the preparation date, not a claim that the beta has been published. Check the GitHub Releases page for availability.
+
+- Fix protocol-06 inverter-family selection so SPH and TL3 suffixes are applied once by the established layout selector instead of producing invalid doubled layout names.
+- Reassemble protocol 02, 05, and 06 frames across TCP splits and coalesced reads, preserve valid messages before a later malformed coalesced message, isolate slow upstream connects, complete partial writes, and close late sockets deterministically during shutdown.
+- Forward non-blocked raw traffic before optional local processing, exclude invalid-CRC records from local publication, and contain Influx write failures so Home Assistant processing can continue.
+- Replace executable-style configuration mapping parsing with JSON and safe literal compatibility, validate final environment-over-INI values, and redact sensitive configuration from logs and errors.
+- Add a pseudonymised real protocol-06 parser-output golden fixture covering frame boundaries, selected layout, normalised values, MQTT output, and the exact Home Assistant extension hand-off.
+- Build source-identical runtime and Home Assistant add-on images from the same reviewed checkout with hash-locked dependencies and digest-pinned base images.
+- Run Grott as a non-root application user, add passive health and artifact checks, support read-only filesystems, harden the supplied Compose deployment with all capabilities dropped, and retire the obsolete armv6 Dockerfile.
+- Restrict the Home Assistant add-on to supported proxy mode, normalise boolean defaults so the Home Assistant extension is enabled when `ha_plugin` is omitted, disable native MQTT when the bundled extension is active, and serialise extension options as JSON.
+- Harden CI and manual release publication with immutable action references, exact-source annotated tags, repeated default-branch and tag revalidation, four-platform validation, vulnerability and secret scanning, digest promotion, protected-environment gates, deterministic human-written release notes, and post-promotion verification.
+- Add operator upgrade, rollback, controlled Home Assistant UAT, release-recovery, and legal-boundary guidance.
+
 ## 0.1.9-beta
 
 - Add a `diagnostic_logging` support switch that dumps hex for short packets which were forwarded to Growatt but skipped locally because they were below `minrecl`.

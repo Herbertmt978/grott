@@ -16,9 +16,15 @@ ADDON_DIR = ROOT / "addons" / "grott"
 CONFIG_PATH = ADDON_DIR / "config.yaml"
 REPOSITORY_PATH = ROOT / "repository.yaml"
 DOCKERFILE_PATH = ADDON_DIR / "Dockerfile"
+RUN_PATH = ADDON_DIR / "run.sh"
+LEGACY_RPI_DOCKERFILE_PATH = ROOT / "docker" / "dockerrpi"
 
 EXPECTED_ARCHES = {"aarch64", "amd64", "armv7", "i386"}
 EXPECTED_IMAGE = "ghcr.io/herbertmt978/grott-ha-docker"
+PINNED_PYTHON_IMAGE = (
+    "python:3.11.15-alpine3.24@"
+    "sha256:25976e9d34a0fab1f278cae931f34c8303d97bf0c0d7f85b6b4dcf641d7702a4"
+)
 REQUIRED_REPOSITORY_KEYS = {"name", "url", "maintainer"}
 REQUIRED_ADDON_KEYS = {
     "name",
@@ -80,6 +86,11 @@ def validate_addon_config(errors: list[str]) -> None:
     )
     require(
         errors,
+        addon.get("stage") == "experimental",
+        "add-on stage must remain experimental until every release gate is satisfied",
+    )
+    require(
+        errors,
         addon.get("image") == EXPECTED_IMAGE,
         f"add-on image should be {EXPECTED_IMAGE}",
     )
@@ -101,9 +112,59 @@ def validate_addon_config(errors: list[str]) -> None:
     if isinstance(options, dict) and isinstance(schema, dict):
         missing_schema = set(options) - set(schema)
         require(errors, not missing_schema, f"options missing schema entries: {sorted(missing_schema)}")
+        require(
+            errors,
+            options.get("mode") == "proxy" and schema.get("mode") == "list(proxy)",
+            "Home Assistant add-on must expose proxy mode only",
+        )
+
+    runtime_bytes = RUN_PATH.read_bytes()
+    require(
+        errors,
+        b"\r" not in runtime_bytes and runtime_bytes.endswith(b"\n"),
+        "run.sh must use LF-only line endings",
+    )
+    runtime = runtime_bytes.decode("utf-8")
+    ha_start = re.search(
+        r'^\s*if \[ "\$\(json_get ha_plugin true\)" = "True" \]; then\s*$',
+        runtime,
+        re.MULTILINE,
+    )
+    ha_block = ""
+    if ha_start:
+        remainder = runtime[ha_start.end():]
+        ha_end = re.search(r"^\s*fi\s*$", remainder, re.MULTILINE)
+        if ha_end:
+            ha_block = remainder[:ha_end.start()]
+    require(
+        errors,
+        bool(re.search(r"^[ \t]*export[ \t]+gnomqtt=True[ \t]*$", ha_block, re.MULTILINE)),
+        "run.sh ha_plugin block must disable native MQTT with gnomqtt=True",
+    )
+    require(
+        errors,
+        bool(
+            re.search(
+                r"^[ \t]*print\(json\.dumps\(payload(?:,.*)?\)\)[ \t]*$",
+                ha_block,
+                re.MULTILINE,
+            )
+        )
+        and not re.search(
+            r"^[ \t]*print\(repr\(payload\)\)[ \t]*$", ha_block, re.MULTILINE
+        ),
+        "run.sh must serialize gextvar with json.dumps, not repr",
+    )
 
     require(errors, addon.get("ports", {}).get("5279/tcp") == 5279, "port 5279/tcp must be exposed")
     require(errors, "mqtt:need" in (addon.get("services") or []), "MQTT service should be declared as needed")
+    require(errors, addon.get("tmpfs") is True, "add-on must enable tmpfs for writable temporary files")
+    mappings = addon.get("map") or []
+    require(
+        errors,
+        not any(str(mapping).startswith("share:") for mapping in mappings),
+        "add-on must not request the unused share mapping",
+    )
 
 
 def validate_files(errors: list[str]) -> None:
@@ -115,11 +176,37 @@ def validate_files(errors: list[str]) -> None:
     for label in ("io.hass.version", "io.hass.type", "io.hass.arch"):
         require(errors, label in dockerfile, f"Dockerfile missing {label} label")
 
-    version = load_yaml(CONFIG_PATH).get("version")
     require(
         errors,
-        f"GROTT_REF=v{version}" in dockerfile,
-        "Dockerfile default GROTT_REF should track the add-on version tag",
+        f"ARG PYTHON_IMAGE={PINNED_PYTHON_IMAGE}" in dockerfile
+        and dockerfile.count("FROM ${PYTHON_IMAGE}") == 2
+        and "BUILD_FROM" not in dockerfile,
+        "Dockerfile must use the approved digest-pinned Python base in both stages",
+    )
+    require(
+        errors,
+        "git clone" not in dockerfile
+        and "GROTT_REPO" not in dockerfile
+        and "GROTT_REF" not in dockerfile
+        and "COPY grott.py " in dockerfile
+        and "COPY requirements.lock " in dockerfile,
+        "Dockerfile must build from the reviewed repository root context without a remote clone",
+    )
+    require(
+        errors,
+        "COPY T06NNNNXMOD.json /app/T06NNNNXMOD.json" in dockerfile,
+        "Dockerfile must include the root external-layout fixture",
+    )
+    require(
+        errors,
+        'exec su-exec grott:grott "$GROTT_RUNNER" -u /app/grott.py -v'
+        in RUN_PATH.read_text(encoding="utf-8"),
+        "run.sh must drop from Supervisor root to grott:grott before starting Grott",
+    )
+    require(
+        errors,
+        not LEGACY_RPI_DOCKERFILE_PATH.exists(),
+        "legacy armv6 docker/dockerrpi must remain retired",
     )
 
 

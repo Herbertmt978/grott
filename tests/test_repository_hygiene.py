@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
+import json
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
@@ -134,11 +135,24 @@ def test_docker_context_keeps_every_required_build_input():
         "requirements.lock",
         "examples/grott.ini",
         "examples/Home Assistent/grott_ha.py",
+        "examples/Record Layout/t060103xmax3.json",
+        "examples/Record Layout/T06221b.json",
+        "examples/Record Layout/T06NNNNXMOD.json",
         "tools/container_healthcheck.py",
         "tools/validate_container_artifact.py",
-        "T06NNNNXMOD.json",
     ):
         assert not docker_context_ignores(path), f"required build input ignored: {path}"
+
+
+def test_bundled_external_layouts_are_valid_json():
+    errors = []
+    for path in sorted((ROOT / "examples" / "Record Layout").glob("*.json")):
+        try:
+            json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            errors.append(f"{path.name}: {exc}")
+
+    assert not errors
 
 
 def test_gitignore_guards_local_release_secrets_and_captures():

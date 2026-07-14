@@ -80,7 +80,14 @@ def test_artifact_policy_covers_complete_modules_payload_and_removed_tooling():
         "grottext.ha",
         "grott_ha",
     }
-    assert {"grott.py", "grott.ini", "grott_ha.py", "T06NNNNXMOD.json"}.issubset(
+    assert {
+        "grott.py",
+        "grott.ini",
+        "grott_ha.py",
+        "T06NNNNXMOD.json",
+        "t060103xmax3.json",
+        "T06221b.json",
+    }.issubset(
         {path.name for path in validate_container_artifact.REQUIRED_PAYLOADS}
     )
     assert {"gcc", "g++", "cc", "make"}.issubset(
@@ -88,6 +95,24 @@ def test_artifact_policy_covers_complete_modules_payload_and_removed_tooling():
     )
     assert "/opt/venv/bin/wheel" in {
         path.as_posix() for path in validate_container_artifact.FORBIDDEN_PATHS
+    }
+
+
+def test_artifact_validator_parses_every_external_layout_payload(tmp_path, monkeypatch):
+    monkeypatch.setattr(validate_container_artifact, "APP_DIR", tmp_path)
+
+    for name in ("T06NNNNXMOD.json", "t060103xmax3.json", "T06221b.json"):
+        (tmp_path / name).write_text('{"layout": {}}', encoding="utf-8")
+    (tmp_path / "t_bad.json").write_text('{"layout": }', encoding="utf-8")
+    (tmp_path / "not-a-layout.json").write_text("not json", encoding="utf-8")
+
+    payloads = validate_container_artifact.external_layout_payloads()
+
+    assert {path.name for path in payloads} == {
+        "T06221b.json",
+        "T06NNNNXMOD.json",
+        "t060103xmax3.json",
+        "t_bad.json",
     }
 
 

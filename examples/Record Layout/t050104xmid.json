@@ -79,7 +79,7 @@
     "t_dci_current"       : {"value" :898, "length": 2, "type": "num", "divide": 10},
     "pid_bus_voltage"     : {"value" :902, "length": 2, "type": "num", "divide": 10},
 
-    "out_apparent_pwr"  : {"value" :1006, "length": 4, "type": "numx", "divide": 10},
+    "out_apparent_pwr"  : {"value" :1006, "length": 4, "type": "numx", "divide": 10}
 
 
     }

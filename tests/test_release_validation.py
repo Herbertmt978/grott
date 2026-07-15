@@ -205,7 +205,7 @@ jq() {
 """
     environment = os.environ | {
         "GITHUB_REPOSITORY": "Herbertmt978/grott",
-        "RELEASE_TAG": "v0.1.10-beta",
+        "RELEASE_TAG": "v0.1.11-beta",
         "SOURCE_SHA": "0311742803117428031174280311742803117428",
         "RUNTIME_IMAGE": "ghcr.io/herbertmt978/grott",
         "ADDON_IMAGE": "ghcr.io/herbertmt978/grott-ha-docker",
@@ -421,8 +421,8 @@ jq() {
 """
     environment = os.environ | {
         "MOCK_MODE": mode,
-        "RELEASE_TAG": "v0.1.10-beta",
-        "RELEASE_VERSION": "0.1.10-beta",
+        "RELEASE_TAG": "v0.1.11-beta",
+        "RELEASE_VERSION": "0.1.11-beta",
         "RUNTIME_IMAGE": "ghcr.io/herbertmt978/grott",
         "ADDON_IMAGE": "ghcr.io/herbertmt978/grott-ha-docker",
         "RUNTIME_DIGEST": "sha256:" + "a" * 64,
@@ -617,7 +617,7 @@ def run_public_release_gate(
         fixtures["tag-ruleset-42.json"]["id"] = 43
     elif mode == "tag-exact-ref-only":
         fixtures["tag-ruleset-42.json"]["conditions"]["ref_name"]["include"] = [
-            "refs/tags/v0.1.10-beta"
+            "refs/tags/v0.1.11-beta"
         ]
     elif mode == "branch-moved":
         fixtures["default-ref.json"]["object"]["sha"] = "e" * 40
@@ -665,7 +665,7 @@ gh() {
         "MOCK_MODE": mode,
         "GITHUB_REPOSITORY": "Herbertmt978/grott",
         "DEFAULT_BRANCH": "master",
-        "RELEASE_TAG": "v0.1.10-beta",
+        "RELEASE_TAG": "v0.1.11-beta",
         "SOURCE_SHA": source_sha,
         "GH_TOKEN": "test-token-not-a-secret",
     }
@@ -694,7 +694,7 @@ def copy_release_inputs(destination: Path) -> None:
         destination / "tools",
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
-    for filename in ("README.md", "RELEASING.md", "grott.py"):
+    for filename in ("README.md", "RELEASING.md", "grott.py", ".dockerignore"):
         shutil.copy2(ROOT / filename, destination / filename)
 
 
@@ -900,7 +900,7 @@ def test_prerelease_fails_closed_when_curated_notes_are_blank(tmp_path: Path) ->
         )
     )
     release = {
-        "tag_name": "v0.1.10-beta",
+        "tag_name": "v0.1.11-beta",
         "target_commitish": "master",
         "draft": False,
         "prerelease": True,
@@ -978,7 +978,7 @@ def test_existing_prerelease_guard_accepts_branch_target_only_when_release_match
     )
     body = immutable_prefix + "\n\n" + curated_notes
     release: dict[str, object] = {
-        "tag_name": "v0.1.10-beta",
+        "tag_name": "v0.1.11-beta",
         "target_commitish": "master",
         "draft": False,
         "prerelease": True,
@@ -1870,7 +1870,7 @@ def test_release_runbook_explains_clean_gate_and_annotated_remote_refs() -> None
     "tag",
     [
         # Deliberately missing the required v prefix; not a version authority.
-        "0.1.10-beta",
+        "0.1.11-beta",
         "v01.1.0",
         "v1.01.0",
         "v1.0.01",

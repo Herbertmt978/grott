@@ -17,6 +17,7 @@ CONFIG_PATH = ADDON_DIR / "config.yaml"
 REPOSITORY_PATH = ROOT / "repository.yaml"
 DOCKERFILE_PATH = ADDON_DIR / "Dockerfile"
 RUN_PATH = ADDON_DIR / "run.sh"
+DOCKERIGNORE_PATH = ROOT / ".dockerignore"
 LEGACY_RPI_DOCKERFILE_PATH = ROOT / "docker" / "dockerrpi"
 
 EXPECTED_ARCHES = {"aarch64", "amd64", "armv7", "i386"}
@@ -196,6 +197,12 @@ def validate_files(errors: list[str]) -> None:
         errors,
         'COPY ["examples/Record Layout/", "/app/"]' in dockerfile,
         "Dockerfile must include bundled external layout JSON files",
+    )
+    dockerignore = DOCKERIGNORE_PATH.read_text(encoding="utf-8")
+    require(
+        errors,
+        "/examples/Record Layout/t06NNNNX.json" in dockerignore,
+        "Docker build context must exclude the conflicting generic layout override",
     )
     require(
         errors,

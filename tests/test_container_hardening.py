@@ -95,6 +95,8 @@ def test_both_images_use_the_same_pinned_multistage_alpine_base_and_hash_lock():
 
 
 def test_images_build_only_from_reviewed_root_context_and_copy_identical_sources():
+    dockerignore = _text(ROOT / ".dockerignore")
+    assert "/examples/Record Layout/t06NNNNX.json" in dockerignore
     for path in DOCKERFILES:
         dockerfile = _text(path)
         assert "git clone" not in dockerfile

@@ -68,3 +68,9 @@ def test_config_topics_are_legal(monkeypatch):
     topics = [item["topic"] for item in sent]
     assert "homeassistant/sensor/grott/INV123_pactogrids/config" in topics
     assert all(" " not in topic for topic in topics)
+    state = next(
+        item for item in sent if item["topic"] == "homeassistant/grott/INV123/state"
+    )
+    state_values = json.loads(state["payload"])
+    assert state_values["pactogrids"] == 12
+    assert "pactogrids " not in state_values

@@ -8,24 +8,24 @@ This fork keeps the upstream history intact. It exists because the problem in up
 
 ## Current Status
 
-The current release candidate is `v0.1.10-beta`. Read its [human-written release notes](docs/releases/v0.1.10-beta.md) for the problems fixed and the user benefits. It remains experimental and must complete the gates in [RELEASING.md](RELEASING.md) before appearing on the generic [Releases page](https://github.com/Herbertmt978/grott/releases). That Releases page is the availability authority: if `v0.1.10-beta` is not listed there, its public image tags do not exist yet and the commands below are preparation examples only.
+The latest supported release is `v0.1.9-beta`. `v0.1.10-beta` remains a prerelease while its Home Assistant entity and unit changes are revalidated. The current release candidate is `v0.1.11-beta`, but it is a testing-only corrective candidate and must not be published until every gate in [RELEASING.md](RELEASING.md) passes and the owner makes a new release decision. Read its [human-written release notes](docs/releases/v0.1.11-beta.md) for the problems under test. The [GitHub releases listing](https://github.com/Herbertmt978/grott/releases) is the public reference. The Releases page is the supported-availability authority: absence means a candidate is unsupported, but does not prove that GHCR tags are absent because image promotion can precede release creation. Until support is declared there, the commands below are preparation examples only.
 
 | Version domain | Version | Meaning |
 | --- | --- | --- |
-| Fork/add-on release | `0.1.10-beta` | The Docker image, Home Assistant add-on metadata, and release tag prepared by this fork. |
+| Fork/add-on release | `0.1.11-beta` | The Docker image, Home Assistant add-on metadata, and release tag prepared by this fork. |
 | Bundled Grott core (upstream startup version) | `2.8.3` | The version printed by the inherited Grott entry point; fork fixes are carried on top of that core. |
-| Bundled Home Assistant extension | `0.0.7-rc2` | The in-repository `grott_ha.py` extension used for MQTT discovery and state. |
+| Bundled Home Assistant extension | `0.0.8` | The in-repository `grott_ha.py` extension used for MQTT discovery and state. |
 
 This is beta software. It has been tested with a real ShineWiFi/SPH Home Assistant setup and with sanitized layout fixtures for generic, SPH, SPA, TL3, and MIN-style packets. Growatt has many inverter and datalogger combinations, so please treat new hardware combinations as testing until the values have been compared with ShinePhone.
 
-Previously published beta images are available on GHCR. The `0.1.10-beta` candidate is prepared for the same platform set, but its images must not be published until the release gates pass:
+Previously published beta images are available on GHCR. The `0.1.11-beta` candidate is prepared for the same platform set, but its images must not be published until the release gates pass:
 
 - `amd64`
 - `aarch64`
 - `armv7`
 - `i386`
 
-The upstream project does not currently have a repository-level license. This fork preserves attribution and does not add a license to inherited upstream code. **No public redistribution release may be made until the upstream maintainer supplies an explicit licence or written redistribution permission.** See [docs/LEGAL.md](docs/LEGAL.md), the release gates in [RELEASING.md](RELEASING.md), and the upstream discussion in [johanmeijer/grott#512](https://github.com/johanmeijer/grott/issues/512).
+The upstream project does not currently have a repository-level license. This fork preserves attribution and does not add a license to inherited upstream code. On 2026-07-14, the fork owner confirmed that upstream redistribution permission has been obtained for this fork and its container images. That permission does not authorize commercial use or reuse unless Johan Meijer has separately agreed, and any financial reward or appreciation is directed to him. Public release still requires every gate in [RELEASING.md](RELEASING.md); see [docs/LEGAL.md](docs/LEGAL.md) and the upstream discussion in [johanmeijer/grott#512](https://github.com/johanmeijer/grott/issues/512).
 
 ## What Changed In This Fork
 
@@ -53,7 +53,7 @@ Growatt datalogger -> Grott -> Growatt servers
 
 In proxy mode, your ShinePhone app can continue to work because Grott forwards the packets to Growatt after reading them. Grott listens on TCP port `5279` by default.
 
-Sniff mode still exists upstream, but it needs packet routing and elevated network permissions. The v0.1.10-beta images and supplied Compose profile are qualified for proxy mode only. If an existing installation uses `server` or `sniff`, keep that installation in place; this beta does not provide a supported packaged migration for those modes.
+Sniff mode still exists upstream, but it needs packet routing and elevated network permissions. The v0.1.11-beta images and supplied Compose profile are qualified for proxy mode only. If an existing installation uses `server` or `sniff`, keep that installation in place; this beta does not provide a supported packaged migration for those modes.
 
 ## Before You Start
 
@@ -95,8 +95,11 @@ This is the easiest install if Grott will run on the same Home Assistant machine
    layout_auto_family: true
    diagnostic_logging: false
    ha_plugin: true
+   ha_entity_profile: v0_1_9_standard
    mqtt_host: core-mosquitto
    mqtt_port: 1883
+   mqtt_user: ""
+   mqtt_password: ""
    mqtt_retain: false
    ```
 
@@ -117,18 +120,39 @@ invtype: sph
 
 Leave `layout_strict` as `false` unless you intentionally want old Grott behaviour where the configured inverter family is forced even when the parsed values look wrong.
 
+## Choose The Home Assistant Entity Profile
+
+`ha_entity_profile` controls Home Assistant MQTT discovery only. It accepts exactly these values:
+
+- `v0_1_9_standard` is the default for the `T06NNNNXMOD` and `T06NNNNX` decoded layouts. Its 31 layout-derived entities plus `grott_last_push` reproduce the 32 Home Assistant entities discovered by the verified standard-Docker `v0.1.9-beta` setup.
+- `all` exposes the complete active `T06NNNNXMOD` map: 170 layout-derived entities plus `grott_last_push`, for 171 discovered entities. Generic `T06NNNNX` remains at the verified 32 entities with the normal `includeall=False` parser setting. If Grott's separate `includeall=True` setting is enabled, `all` also discovers fields marked `incl: no`: 205 entities for MOD and 36 for generic. Other decoded layouts retain their existing discovery behavior under either profile.
+
+Changing this profile does not change Grott packet parsing, validation, or proxy forwarding. The full Home Assistant state JSON is unchanged: it still contains every normalized decoded packet value plus `grott_last_push`; the profile filters discovery only. Grott's native raw telemetry is also unchanged. In the supported Home Assistant extension setup, native MQTT remains disabled with `gnomqtt=True` exactly as before; the extension continues to publish discovery and state.
+
+The default profile also reconciles retained discovery. It first publishes the desired retained configs at QoS 1, then sends retained empty QoS 1 tombstones only for known Grott config topics in the same device's supported generic/MOD lineage that fall outside the verified 32-entity set. This includes extras left by an earlier MOD `all` or `includeall=True` run even when the first post-upgrade packet is generic. It does not scan the broker or remove another device's or integration's discovery configs. If cleanup fails, Grott logs it, still publishes the full state, and retries the exact cleanup on the next packet. Because an omitted option defaults to `v0_1_9_standard`, upgrading an existing installation triggers this cleanup on its next live packet.
+
+Create and verify your backup before upgrading or switching profiles. Retained discovery configs, entity-registry changes, dashboard customizations, and statistics repairs are not restored merely by rolling back an image. Every Home Assistant deployment, including Docker-backed Home Assistant, needs a full Home Assistant backup that covers its registry/configuration plus retained MQTT state through the included Mosquitto data or a separate broker snapshot. Docker users must also keep their previous `grott.ini` and immutable image reference. After rollback, verify the expected entity set, `grott_last_push`, and the Home Assistant Repairs page before accepting the result.
+
+To opt into the complete distinct layout map in the add-on, change only this option:
+
+```yaml
+ha_entity_profile: all
+```
+
+The examples use placeholders and contain no real or stable device identifiers.
+
 ## Install With Docker Compose
 
 Use this if Grott will run on a separate Linux server, NAS, or VM.
 
-**Availability check:** do not run the candidate configuration below until `v0.1.10-beta` appears on this repository's Releases page. The hardened settings are qualified with the matching `0.1.10-beta` image and should not be assumed to work unchanged with an older image.
+**Availability check:** do not run the candidate configuration below until `v0.1.11-beta` appears on this repository's Releases page. The hardened settings are qualified with the matching `0.1.11-beta` image and should not be assumed to work unchanged with an older image.
 
 Create `docker-compose.yml`:
 
 ```yaml
 services:
   grott:
-    image: ghcr.io/herbertmt978/grott:0.1.10-beta
+    image: ghcr.io/herbertmt978/grott:0.1.11-beta
     container_name: grott
     restart: unless-stopped
     init: true
@@ -175,10 +199,16 @@ nomqtt = True
 [extension]
 extension = True
 extname = grottext.ha
-extvar = {"ha_mqtt_host": "MQTT_HOST", "ha_mqtt_port": 1883, "ha_mqtt_user": "MQTT_USER", "ha_mqtt_password": "MQTT_PASSWORD", "ha_mqtt_retain": False}
+extvar = {"ha_mqtt_host": "MQTT_HOST", "ha_mqtt_port": 1883, "ha_mqtt_user": "MQTT_USER", "ha_mqtt_password": "MQTT_PASSWORD", "ha_mqtt_retain": False, "ha_entity_profile": "v0_1_9_standard"}
 ```
 
 Replace `MQTT_HOST`, `MQTT_USER`, and `MQTT_PASSWORD` with your broker details. If your broker does not require authentication, omit the user and password values from `extvar`.
+
+To opt into the complete distinct layout map with `grott.ini`, use this exact `extvar` form instead:
+
+```ini
+extvar = {"ha_mqtt_host": "MQTT_HOST", "ha_mqtt_port": 1883, "ha_mqtt_user": "MQTT_USER", "ha_mqtt_password": "MQTT_PASSWORD", "ha_mqtt_retain": False, "ha_entity_profile": "all"}
+```
 
 The maintained image runs as UID/GID `10001:10001`. On a Linux Docker host, the bind-mounted `grott.ini` must be readable by UID `10001`; a restrictive example is `sudo chown 10001:10001 grott.ini && sudo chmod 0600 grott.ini`. Do not make a secret-bearing configuration file world-readable just to satisfy the container.
 
@@ -314,13 +344,15 @@ Compare a few values with ShinePhone. They will not always update at the exact s
 
 Back up your existing `grott.ini` or Home Assistant add-on options first.
 
+The default `v0_1_9_standard` profile automatically reconciles Grott-owned extra discovery configs for the same device's supported generic/MOD lineage. Use the manual helper below only for stale Grott topics outside that deliberately narrow automatic scope, and always review its dry run first.
+
 For Docker, change only the image first:
 
 ```yaml
-    image: ghcr.io/herbertmt978/grott:0.1.10-beta
+    image: ghcr.io/herbertmt978/grott:0.1.11-beta
 ```
 
-Only make that change after the candidate appears on the Releases page; before then the public tag is unavailable.
+Only make that change after the candidate is declared supported on the Releases page. Before then it is unsupported, even if a failed publication attempt left a GHCR tag behind.
 
 Then make sure your config includes the proxy settings:
 
@@ -391,7 +423,7 @@ If ShinePhone stops updating:
 
 ## Rollback
 
-Back up the active `grott.ini` before a Docker update. Before any Home Assistant UAT, create a full Home Assistant backup named **Grott pre-update rollback**, wait for it to report completed, verify it is visible in the backup list and contains the Grott add-on/configuration, and retain its backup ID. Without that verified backup, UAT must not begin. Also record which process owns TCP port `5279`; only one Grott service or forwarder may listen there during rollback.
+Back up the active `grott.ini` before a Docker update. Before any Home Assistant UAT, including Docker-backed Home Assistant, create a full Home Assistant backup named **Grott pre-update rollback**, wait for it to report completed, verify it is visible and covers the entity registry/configuration, and retain its backup ID. Preserve retained MQTT discovery through that backup when it includes Mosquitto, or take a separate broker snapshot. Without that verified recovery set, UAT must not begin. Also record which process owns TCP port `5279`; only one Grott service or forwarder may listen there during rollback.
 
 For Docker, the verified previous fork image is `0.1.9-beta`. Pinning its immutable four-platform manifest is the most exact rollback:
 
@@ -411,7 +443,7 @@ For Home Assistant, the only supported rollback is the verified **Grott pre-upda
 
 For evidence, the previous `0.1.9-beta` add-on manifest was independently verified as `ghcr.io/herbertmt978/grott-ha-docker@sha256:7c55c161195eccd5d93bd22576bee2ea2958f68a380087eb6694d103bcfafbb1`; the digest does not make historical add-on installation from the current repository a supported rollback mechanism.
 
-After either rollback, wait for a fresh packet, confirm `grott_last_push` advances, compare several power and energy values with ShinePhone, and confirm ShinePhone itself still receives new data through the proxy path.
+After either rollback, wait for a fresh packet, confirm `grott_last_push` advances, compare several power and energy values with ShinePhone, confirm ShinePhone itself still receives new data through the proxy path, and verify Home Assistant Repairs has no new Grott unit or statistics warnings.
 
 The datalogger can stay pointed at the same host and port if the replacement Grott service is listening on TCP `5279`. Otherwise, change the datalogger server setting back to your previous target.
 

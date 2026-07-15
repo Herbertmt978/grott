@@ -14,7 +14,7 @@ ADDON_DIR = ROOT / "addons" / "grott"
 MISSING_OPTIONS = object()
 
 
-def run_addon_runtime(tmp_path, name, options=MISSING_OPTIONS):
+def run_addon_runtime(tmp_path, name, options=MISSING_OPTIONS, expect_success=True):
     if os.name == "nt":
         shell = Path(r"C:\Program Files\Git\bin\sh.exe")
     else:
@@ -55,6 +55,9 @@ def run_addon_runtime(tmp_path, name, options=MISSING_OPTIONS):
         capture_output=True,
         check=False,
     )
+    if not expect_success:
+        return result, capture_path
+
     assert result.returncode == 0, result.stderr
     return json.loads(capture_path.read_text(encoding="utf-8"))
 
@@ -71,6 +74,13 @@ def test_addon_schema_exposes_proxy_mode_only():
 
     assert config["options"]["mode"] == "proxy"
     assert config["schema"]["mode"] == "list(proxy)"
+
+
+def test_addon_schema_exposes_supported_ha_entity_profiles():
+    config = yaml.safe_load((ADDON_DIR / "config.yaml").read_text(encoding="utf-8"))
+
+    assert config["options"]["ha_entity_profile"] == "v0_1_9_standard"
+    assert config["schema"]["ha_entity_profile"] == "list(v0_1_9_standard|all)"
 
 
 def test_addon_config_uses_tmpfs_and_does_not_mount_share():
@@ -115,6 +125,7 @@ def test_addon_runtime_translates_ha_plugin_options_behaviorally(tmp_path):
             "mqtt_retain": True,
             "mqtt_user": "synthetic-user",
             "mqtt_password": "synthetic-password",
+            "ha_entity_profile": "all",
         },
     )
     assert enabled["gnomqtt"] == "True"
@@ -124,6 +135,7 @@ def test_addon_runtime_translates_ha_plugin_options_behaviorally(tmp_path):
         "ha_mqtt_retain": True,
         "ha_mqtt_user": "synthetic-user",
         "ha_mqtt_password": "synthetic-password",
+        "ha_entity_profile": "all",
     }
 
     disabled = run_addon_runtime(tmp_path, "disabled", {"ha_plugin": False})
@@ -147,6 +159,7 @@ def test_addon_runtime_defaults_ha_plugin_to_enabled_when_options_file_is_missin
         "ha_mqtt_host": "core-mosquitto",
         "ha_mqtt_port": 1883,
         "ha_mqtt_retain": False,
+        "ha_entity_profile": "v0_1_9_standard",
     }
 
 
@@ -160,7 +173,21 @@ def test_addon_runtime_defaults_ha_plugin_to_enabled_when_key_is_missing(tmp_pat
         "ha_mqtt_host": "core-mosquitto",
         "ha_mqtt_port": 1883,
         "ha_mqtt_retain": False,
+        "ha_entity_profile": "v0_1_9_standard",
     }
+
+
+def test_addon_runtime_rejects_unsupported_ha_entity_profile(tmp_path):
+    result, capture_path = run_addon_runtime(
+        tmp_path,
+        "unsupported-ha-entity-profile",
+        {"ha_entity_profile": "everything"},
+        expect_success=False,
+    )
+
+    assert result.returncode != 0
+    assert "invalid ha_entity_profile" in result.stderr
+    assert not capture_path.exists()
 
 
 def test_validator_rejects_non_proxy_addon_schema(monkeypatch):

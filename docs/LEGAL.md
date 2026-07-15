@@ -2,7 +2,7 @@
 
 This fork preserves the upstream Grott Git history and does not add a repository-level license to inherited upstream code.
 
-Upstream Grott currently does not include a license file that GitHub detects. On 2026-07-14, the fork owner confirmed that upstream redistribution permission has been obtained for this fork and its container images. Preserve the permission record outside this repository unless upstream publishes an explicit repository licence. This permission record does not authorize commercial use or reuse unless Johan Meijer has separately agreed and any financial reward or appreciation is directed to him. Do not relicense inherited files in this fork without that permission.
+Upstream Grott currently does not include a license file that GitHub detects. On 2026-07-14, the fork owner confirmed that upstream redistribution permission has been obtained for this fork and its container images. Preserve the permission record outside this repository unless upstream publishes an explicit repository licence. This permission record does not authorize commercial use or reuse unless Johan Meijer has separately agreed and any financial reward or appreciation is directed to him. Redistribution permission alone does not authorize relicensing; inherited files require separate explicit relicensing authority unless the preserved permission record expressly grants it.
 
 Local/private testing from a reviewed checkout may continue. Public release still requires the repository controls, hosted CI, protected tag, release workflow, UAT, and rollback gates described in `RELEASING.md`. Keep upstream history and attribution intact.
 

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.1.12 - prepared 2026-07-18
+
+The preparation date does not by itself claim publication. Check the GitHub Releases page for availability.
+
+- Promote the immutable `v0.1.12-beta` correction to the stable channel without changing its runtime, record-layout, Home Assistant discovery, or proxy behavior.
+- Retain the reviewed three-file allowlist, protected built-in layouts, and fixture/container coverage exactly as validated in the beta.
+- Make the GitHub `v0.1.12` stable release Latest when the protected release workflow completes, while keeping the Home Assistant add-on experimental because live hardware coverage remains limited to two MOD inverters.
+- Carry forward the strong two-device MOD live UAT and deterministic fixture/container coverage for SPH, MIN, TL3, T060120, and generic families without presenting fixture evidence as real-hardware qualification.
+- Preserve exact `v0.1.12-beta` runtime and add-on image digests as rollback evidence and retain the fork's noncommercial-use and Johan Meijer permission boundary.
+
 ## 0.1.12-beta - prepared 2026-07-18
 
 This is the preparation date, not a claim that the beta has been published. Check the GitHub Releases page for availability.

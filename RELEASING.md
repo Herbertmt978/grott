@@ -1,12 +1,12 @@
 # Releasing Grott HA Docker
 
-This runbook prepares and verifies the fork's beta artifacts. It does not grant permission to publish them, change repository controls, create a tag, deploy to a VM, or update Home Assistant. Those actions require explicit owner approval at the time they are performed.
+This runbook prepares and verifies the fork's release artifacts. It does not grant permission to publish them, change repository controls, create a tag, deploy to a VM, or update Home Assistant. Those actions require explicit owner approval at the time they are performed.
 
 ## Release identity
 
 | Version domain | Current value | Owner |
 | --- | --- | --- |
-| Fork/add-on release | `0.1.12-beta` / `v0.1.12-beta` | Canonical current version: `addons/grott/config.yaml`; the protected Git tag adds the `v` prefix. |
+| Fork/add-on release | `0.1.12` / `v0.1.12` | Canonical current version: `addons/grott/config.yaml`; the protected Git tag adds the `v` prefix. |
 | Bundled Grott core (upstream startup version) | `2.8.3` | `grott.py` (`verrel`) |
 | Bundled Home Assistant extension | `0.0.8` | `examples/Home Assistent/grott_ha.py` (`__version__`) |
 
@@ -20,16 +20,23 @@ Every item below is fail-closed. A missing, ambiguous, or failing item stops the
 - The default branch is protected, changes reach it through a pull request, and the exact release commit has a current, successful hosted `test` CI result. The pull-request rule must require exactly zero approving reviews, keep stale-review dismissal and last-push approval disabled, and require review threads to be resolved.
 - A protected `release` environment exists and is restricted to the protected default branch. It does not require an independent reviewer.
 - A protected `v*` tag ruleset restricts tag creation, update, and deletion to authorized release maintainers.
+- Immutable releases are enabled for the repository immediately before dispatch; a stable release must be published as immutable and become the repository Latest release.
 - The hosted CI run succeeds at the exact proposed source SHA, including tests, release/add-on validators, locked dependency audit, native image smoke tests, four-platform Buildx builds, artifact checks, and vulnerability/secret scans.
 - Controlled Home Assistant UAT passes with a backup and tested rollback path.
 
-The workflow's read-only control gate uses the hash-pinned `tools/verify_release_controls.py` verifier to check the exact default-branch SHA, a successful `ci.yml` push run at that SHA, the solo-maintainer branch rules, the protected `release` environment, and an active `v*` tag ruleset before package-write permission is granted. GitHub's read-only API does not expose every bypass setting. Immediately before manually dispatching the release workflow, the solo maintainer must inspect the GitHub settings UI and record that:
+The workflow's read-only control gate uses the hash-pinned `tools/verify_release_controls.py` verifier to check the exact default-branch SHA, a successful `ci.yml` push run at that SHA, the solo-maintainer branch rules, the protected `release` environment, and an active `v*` tag ruleset before package-write permission is granted. The workflow token cannot read the repository's Administration-scoped immutable-release setting, and GitHub's read-only API does not expose every bypass setting. Immediately before manually dispatching the release workflow, the solo maintainer must use an administrator-authenticated GitHub session to verify `GET repos/Herbertmt978/grott/immutable-releases` returns `enabled: true`, inspect the GitHub settings UI, and record that:
 
 - branch and tag ruleset bypass actors are limited to the explicitly authorized release maintainers;
 - administrators are not allowed to bypass the `release` environment protection rules; and
 - the required `test` status context is supplied by the intended GitHub Actions integration.
 
-Record and check those settings immediately before dispatch. Do not start the workflow if they do not match the required state. The automated gate runs after dispatch and re-checks the controls available through GitHub's read-only API, but it cannot continuously verify the UI-only bypass settings. If the maintainer sees any control change before publication finishes, cancel the run. The latest read-only GitHub audit on 2026-07-14 found active branch and `v*` tag rulesets plus a `release` environment restricted to protected branches. Their detailed rules and UI-only bypass settings must still be personally re-checked before any future release; this document does not authorize changing them.
+The administrator check can be recorded without exposing credentials:
+
+```sh
+test "$(gh api "repos/${RELEASE_REPO}/immutable-releases" --jq '.enabled')" = true
+```
+
+Record and check those settings immediately before dispatch. Do not start the workflow if they do not match the required state. The automated gate runs after dispatch and re-checks the controls available through GitHub's read-only API; release creation then requires the returned release object to report `immutable: true`, but that post-create check is not a substitute for the pre-dispatch setting check. If the maintainer sees any control change before publication finishes, cancel the run. The latest read-only GitHub audit on 2026-07-18 found active branch and `v*` tag rulesets, immutable releases enabled, and a `release` environment restricted to protected branches. Their detailed rules and UI-only bypass settings must still be personally re-checked before any future release; this document does not authorize changing them.
 
 This model has one important residual risk: compromise of the sole maintainer account can authorize a release without a second person stopping it. Protect that account with strong two-factor authentication, preferably passkeys or hardware security keys, and keep active credentials and scoped tokens to the minimum needed for release work.
 
@@ -108,7 +115,7 @@ Use a private test VM or explicitly authorized Home Assistant test window. Never
 6. Compare the same values with ShinePhone and confirm ShinePhone continues receiving fresh data through the proxy path.
 7. Check Home Assistant Repairs before and after the test. Any new Grott unit, device-class, or statistics warning is a failed UAT result.
 8. Restart the candidate once and confirm it recovers, republishes MQTT discovery without duplicate entities, and forwards packets normally.
-9. Complete the owner-selected observation window or record an explicit owner waiver with the evidence available at that decision. For `v0.1.12-beta`, the owner explicitly waived the remaining planned 24-hour window on 2026-07-18 after the exact candidate passed a restart, 164 successful state publications across both MOD devices, retained `[32, 32]` discovery, and zero runtime errors. This waiver does not waive any other gate in this runbook.
+9. Complete the owner-selected observation window or record an explicit owner waiver with the evidence available at that decision. For `v0.1.12-beta`, the owner explicitly waived the remaining planned 24-hour window on 2026-07-18 after the exact candidate passed a restart, 164 successful state publications across both MOD devices, retained `[32, 32]` discovery, and zero runtime errors. Stable `v0.1.12` may inherit that UAT only while the beta-to-stable diff contains no runtime, layout, Dockerfile, dependency, entrypoint, or default-setting change and artifact-equivalence checks pass. This waiver does not waive any other gate in this runbook.
 10. Stop immediately and follow **Rollback** if parsing, forwarding, MQTT output, health, Home Assistant Repairs, or ShinePhone behavior regresses.
 
 Record the exact candidate image ID, source SHA, architecture, Home Assistant version, add-on options (with secrets redacted), test timestamps, and rollback result.
@@ -118,9 +125,9 @@ Record the exact candidate image ID, source SHA, architecture, Home Assistant ve
 Only after every hard gate passes and the owner explicitly authorizes publication:
 
 1. Reconfirm the release commit is the exact green hosted-CI SHA on the protected default branch.
-2. Create the annotated `v0.1.12-beta` tag under the protected `v*` ruleset and push only that tag.
+2. Create the annotated `v0.1.12` tag under the protected `v*` ruleset and push only that tag.
 3. Verify the annotated tag structure and remote refs. The direct remote ref is the annotated tag-object SHA; the peeled remote ref is the release commit SHA, and they must differ. Exactly one of each ref must exist, and only the peeled ref may equal `SOURCE_SHA`.
-4. Reconfirm the protected default branch still resolves to `SOURCE_SHA`. Start `Publish GHCR images` manually with `workflow_dispatch`, selecting that protected default branch and passing `v0.1.12-beta` as the `tag` input. The workflow binds the tag to `${{ github.sha }}`, the exact protected workflow-dispatch commit, and fails if the branch moved to any other commit.
+4. Reconfirm the protected default branch still resolves to `SOURCE_SHA`, repeat the administrator-authenticated immutable-release setting check, then start `Publish GHCR images` manually with `workflow_dispatch`, selecting that protected default branch and passing `v0.1.12` as the `tag` input. The workflow binds the tag to `${{ github.sha }}`, the exact protected workflow-dispatch commit, and fails if the branch moved to any other commit.
 
 Example commands, to be run only with that authorization:
 
@@ -136,19 +143,19 @@ git ls-remote "${RELEASE_REMOTE}" "refs/tags/${TAG}" "refs/tags/${TAG}^{}"
 gh workflow run publish-ghcr.yml --repo "${RELEASE_REPO}" --ref "${DEFAULT_BRANCH}" -f tag="${TAG}"
 ```
 
-The workflow preserves the protected dispatch SHA before tag checkout, requires an annotated tag whose peeled commit equals that SHA exactly, verifies the live repository controls with a hash-pinned read-only gate, and requires the protected `release` environment. Before package login, final promotion, and prerelease creation, it queries GitHub's live repository identity and current default branch, requires the branch name to remain the one whose controls and CI passed the gate, requires that exact branch tip to match the source SHA, verifies one distinct direct tag-object ref with one matching peeled ref, and confirms the live repository state did not change during those checks. It stages source-SHA candidate manifests, validates and scans each platform by immutable digest, then promotes those digests to both `v0.1.12-beta` and `0.1.12-beta`. It never builds directly to a final release tag.
+The workflow preserves the protected dispatch SHA before tag checkout, requires an annotated tag whose peeled commit equals that SHA exactly, verifies the live repository controls with a hash-pinned read-only gate, and requires the protected `release` environment. Before package login, final promotion, and release creation, it queries GitHub's live repository identity and current default branch, requires the branch name to remain the one whose controls and CI passed the gate, requires that exact branch tip to match the source SHA, verifies one distinct direct tag-object ref with one matching peeled ref, and confirms the live repository state did not change during those checks. It stages source-SHA candidate manifests, validates and scans each platform by immutable digest, then promotes those digests to both `v0.1.12` and `0.1.12`. It never builds directly to a final release tag. A repository-wide concurrency group serializes all release tags so separate dispatches cannot race the Latest pointer.
 
 ## Human-written release notes
 
-The canonical public notes for this release are committed at `docs/releases/v0.1.12-beta.md`. They must be checked with the release commit and use plain language to explain the problem, the fix, why the problem mattered, and the benefit to users. The file must remain UTF-8, LF-only, non-empty, and must not contain the CI-owned `## Immutable release images` heading.
+The canonical public notes for this release are committed at `docs/releases/v0.1.12.md`. They must be checked with the release commit and use plain language to explain the problem, the fix, why the problem mattered, and the benefit to users. The file must remain UTF-8, LF-only, non-empty, and must not contain the CI-owned `## Immutable release images` heading.
 
-At prerelease creation, the workflow fetches this file through the GitHub Contents API at the exact source SHA already proven by the protected annotated tag. It never reads notes from a mutable branch or generates replacement prose. CI constructs one deterministic body containing the verified runtime/add-on digests and four-platform line, followed by the exact human-written file, and passes that body through `--notes-file`.
+At release creation, the workflow fetches this file through the GitHub Contents API at the exact source SHA already proven by the protected annotated tag. It never reads notes from a mutable branch or generates replacement prose. CI constructs one deterministic body containing the verified runtime/add-on digests and four-platform line, followed by the exact human-written file, and passes that body through `--notes-file`.
 
-An existing prerelease is accepted only when its tag, prerelease state, and exact full body match. A missing, blank, malformed, unreachable, manually edited, prefix-only, or appended body is a hard failure; the workflow does not overwrite or repair it automatically.
+An existing release is accepted only when its positive release ID, tag, draft/prerelease state, `immutable: true` state, and exact full body match. Stable tags must be non-prerelease and resolve to that same release ID through the repository Latest endpoint; prerelease tags are explicitly created with `--latest=false` and must not resolve as Latest. A missing, blank, mutable, malformed, unreachable, manually edited, prefix-only, or appended body is a hard failure; the workflow does not overwrite or repair it automatically.
 
 ## Digest and post-promotion verification
 
-From the completed publish job, record `SOURCE_SHA`, the runtime manifest digest, and the add-on manifest digest. The GitHub prerelease notes must begin with both immutable image references and the four supported platforms before the committed human-written notes.
+From the completed publish job, record `SOURCE_SHA`, the runtime manifest digest, and the add-on manifest digest. The GitHub release notes must begin with both immutable image references and the four supported platforms before the committed human-written notes.
 
 Inspect all four final references:
 
@@ -159,9 +166,9 @@ docker buildx imagetools inspect "ghcr.io/herbertmt978/grott-ha-docker:${TAG}"
 docker buildx imagetools inspect "ghcr.io/herbertmt978/grott-ha-docker:${VERSION}"
 ```
 
-For each image, both tags must resolve to the digest recorded by the publish job. Each index must contain `linux/amd64`, `linux/arm64`, `linux/arm/v7`, and `linux/386`; `unknown/unknown` attestation manifests do not replace a required runtime platform. Pull and execute the artifact validator by immutable platform digest for every platform, and confirm the GitHub release is a prerelease targeting `SOURCE_SHA`.
+For each image, both tags must resolve to the digest recorded by the publish job. Each index must contain `linux/amd64`, `linux/arm64`, `linux/arm/v7`, and `linux/386`; `unknown/unknown` attestation manifests do not replace a required runtime platform. Pull and execute the artifact validator by immutable platform digest for every platform. Confirm the GitHub release targets `SOURCE_SHA`, is non-draft, non-prerelease, immutable, and is returned by the repository Latest endpoint.
 
-Copy the immutable runtime and add-on references from the prerelease notes into the release evidence. Do not infer a digest from a local tag or a single-platform image.
+Copy the immutable runtime and add-on references from the release notes into the release evidence. Do not infer a digest from a local tag or a single-platform image.
 
 ## Idempotent retry and Recovery
 
@@ -169,17 +176,17 @@ The workflow is designed for an **Idempotent retry** of the same protected tag a
 
 - If validation or a candidate scan fails, no final release tags are promoted. Fix the cause in a new pull request, require hosted `test` CI to pass at the new commit, and use a new release tag/version; never move the failed protected tag.
 - If one final reference was promoted before a later transient failure, rerun the same workflow only when its candidate digests are unchanged. The conflict guard accepts an existing final reference only when it already equals the candidate digest.
-- If every final reference is correct but prerelease creation failed, rerun the same workflow. Digest promotion and release creation are safe only when the existing values match exactly.
+- If every final reference is correct but release creation failed, rerun the same workflow. Digest promotion and release creation are safe only when the existing values match exactly.
 - If any final tag points to a different digest, stop. Do not overwrite or delete it automatically. Preserve logs, compare the remote tag/source SHA, and obtain explicit owner approval for a documented recovery decision.
 
-Do not retag a different commit as `v0.1.12-beta`, force-push, delete a public package version, or edit release evidence to make a mismatch appear valid.
+Do not retag a different commit as `v0.1.12`, force-push, delete a public package version, or edit release evidence to make a mismatch appear valid.
 
 ## Rollback
 
-The independently verified previous live beta is `0.1.11-beta`; `0.1.9-beta` remains the public Latest baseline. On 2026-07-18, both the `0.1.11-beta` and `v0.1.11-beta` tags resolved to these four-platform manifests:
+The independently verified previous live release is the immutable `0.1.12-beta`. On 2026-07-18, both the `0.1.12-beta` and `v0.1.12-beta` tags resolved to these four-platform manifests:
 
-- Runtime: `ghcr.io/herbertmt978/grott@sha256:872ca78235cd6552b26f16dcd0de17ce18288fc92ffa82e31435c7651e619b6c`
-- Home Assistant add-on: `ghcr.io/herbertmt978/grott-ha-docker@sha256:4446cbcfe83c00e8c667101067fc0643afded0b6338f1d6c76ba6af113c13831`
+- Runtime: `ghcr.io/herbertmt978/grott@sha256:066d806774a147bc4c448761d026eb831cdcfa29bc32ef3a1c361a36a2ea361a`
+- Home Assistant add-on: `ghcr.io/herbertmt978/grott-ha-docker@sha256:410f2b2e4dfe810aa1d9d8b8591eaae0852ae9f61486d78f663cd6a95c2ab6f1`
 
 For Docker, restore the backed-up `grott.ini`, pin the runtime digest above, and recreate the container. A Docker-backed Home Assistant deployment must also restore its verified Home Assistant registry/configuration backup and retained MQTT snapshot; image rollback alone cannot reconstruct tombstoned discovery or statistics metadata. For the add-on, the only supported Home Assistant rollback path is to stop the candidate and restore the verified full backup named **Grott pre-update rollback** by its recorded backup ID. In both cases, start exactly one listener on TCP `5279`, wait for fresh packets, confirm `grott_last_push`, compare values with ShinePhone, confirm ShinePhone still updates, and verify Home Assistant Repairs returned to baseline.
 

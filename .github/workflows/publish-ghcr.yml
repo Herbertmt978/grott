@@ -11,7 +11,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: publish-ghcr-${{ inputs.tag }}
+  group: publish-ghcr-release
   cancel-in-progress: false
 
 env:
@@ -28,6 +28,7 @@ jobs:
     outputs:
       tag: ${{ steps.release_input.outputs.tag }}
       version: ${{ steps.release_input.outputs.version }}
+      is_prerelease: ${{ steps.release_input.outputs.is_prerelease }}
       source_sha: ${{ steps.source.outputs.sha }}
 
     steps:
@@ -43,7 +44,9 @@ jobs:
             echo "ERROR: release tag must match vX.Y.Z[-prerelease] without build metadata" >&2
             exit 1
           fi
+          is_prerelease=false
           if [[ "${REQUESTED_TAG}" == *-* ]]; then
+            is_prerelease=true
             prerelease="${REQUESTED_TAG#*-}"
             IFS='.' read -r -a identifiers <<< "${prerelease}"
             for identifier in "${identifiers[@]}"; do
@@ -55,6 +58,7 @@ jobs:
           fi
           printf 'tag=%s\n' "${REQUESTED_TAG}" >> "${GITHUB_OUTPUT}"
           printf 'version=%s\n' "${REQUESTED_TAG#v}" >> "${GITHUB_OUTPUT}"
+          printf 'is_prerelease=%s\n' "${is_prerelease}" >> "${GITHUB_OUTPUT}"
 
       - name: Preserve protected workflow dispatch SHA
         id: dispatch_source
@@ -230,6 +234,7 @@ jobs:
     outputs:
       tag: ${{ needs.validate.outputs.tag }}
       version: ${{ needs.validate.outputs.version }}
+      is_prerelease: ${{ needs.validate.outputs.is_prerelease }}
       source_sha: ${{ needs.validate.outputs.source_sha }}
       runtime_digest: ${{ steps.runtime_build.outputs.digest }}
       addon_digest: ${{ steps.addon_build.outputs.digest }}
@@ -667,6 +672,7 @@ jobs:
           verify_ref "${ADDON_IMAGE}:${RELEASE_VERSION}" "${ADDON_DIGEST}"
 
   prerelease:
+    name: Create GitHub release
     if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.ref_protected }}
     needs: publish
     runs-on: ubuntu-latest
@@ -675,7 +681,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Revalidate remote tag before prerelease
+      - name: Revalidate remote tag before release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -772,11 +778,12 @@ jobs:
             exit 1
           fi
 
-      - name: Verify or create idempotent GitHub prerelease
+      - name: Verify or create idempotent GitHub release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+          EXPECTED_PRERELEASE: ${{ needs.publish.outputs.is_prerelease }}
           SOURCE_SHA: ${{ needs.publish.outputs.source_sha }}
           RUNTIME_IMAGE: ${{ env.RUNTIME_IMAGE }}
           ADDON_IMAGE: ${{ env.ADDON_IMAGE }}
@@ -796,6 +803,20 @@ jobs:
             echo "ERROR: verified add-on digest is missing or invalid" >&2
             exit 1
           fi
+          case "${EXPECTED_PRERELEASE}" in
+            true)
+              expected_prerelease=true
+              release_state_args=(--prerelease --latest=false)
+              ;;
+            false)
+              expected_prerelease=false
+              release_state_args=(--latest)
+              ;;
+            *)
+              echo "ERROR: validated prerelease state must be exactly true or false" >&2
+              exit 1
+              ;;
+          esac
           release_notes_path="docs/releases/${RELEASE_TAG}.md"
           release_workspace="$(mktemp -d)"
           trap 'rm -rf "${release_workspace}"' EXIT
@@ -824,6 +845,15 @@ jobs:
             cat "${curated_notes_file}"
           } > "${release_body_file}"
 
+          validate_release_schema() {
+            jq -e \
+              'type == "object" and
+               has("id") and (.id | type == "number" and . > 0) and
+               has("tag_name") and has("draft") and has("prerelease") and
+               has("immutable") and (.immutable | type == "boolean") and
+               has("body")' >/dev/null
+          }
+
           lookup_release() {
             local error_file gh_status lookup_error release_json
             error_file="$(mktemp)"
@@ -832,8 +862,7 @@ jobs:
                 2>"${error_file}"
             )"; then
               rm -f "${error_file}"
-              if ! jq -e 'type == "object" and has("tag_name") and has("draft") and has("prerelease") and has("body")' \
-                <<< "${release_json}" >/dev/null; then
+              if ! validate_release_schema <<< "${release_json}"; then
                 echo "ERROR: release lookup returned malformed or ambiguous JSON" >&2
                 return "${LOOKUP_AMBIGUOUS}"
               fi
@@ -853,22 +882,94 @@ jobs:
             fi
           }
 
+          lookup_latest_release() {
+            local error_file gh_status lookup_error release_json
+            error_file="$(mktemp)"
+            if release_json="$(
+              gh api "repos/${GITHUB_REPOSITORY}/releases/latest" \
+                2>"${error_file}"
+            )"; then
+              rm -f "${error_file}"
+              if ! validate_release_schema <<< "${release_json}"; then
+                echo "ERROR: latest-release lookup returned malformed or ambiguous JSON" >&2
+                return "${LOOKUP_AMBIGUOUS}"
+              fi
+              printf '%s\n' "${release_json}"
+              return 0
+            else
+              gh_status=$?
+              lookup_error="$(<"${error_file}")"
+              rm -f "${error_file}"
+              if [[ "${gh_status}" -ne 0 ]] \
+                && grep -Eq '\(HTTP 404\)[[:space:]]*$' <<< "${lookup_error}"; then
+                return "${LOOKUP_ABSENT}"
+              fi
+              echo "ERROR: latest-release lookup failed without an explicit HTTP 404" >&2
+              printf '%s\n' "${lookup_error}" >&2
+              return "${LOOKUP_FAILED}"
+            fi
+          }
+
           verify_release() {
             local context="$1"
             local release_json="$2"
             if jq -e \
               --arg tag "${RELEASE_TAG}" \
+              --argjson expected_prerelease "${expected_prerelease}" \
               --rawfile expected_body "${release_body_file}" \
-              '(.tag_name == $tag) and
-               (.draft == false and .prerelease == true) and
+              '(.id | type == "number" and . > 0) and
+               (.tag_name == $tag) and
+               (.draft == false and .prerelease == $expected_prerelease) and
+               (.immutable == true) and
                ((.body // "") == $expected_body)' \
               <<< "${release_json}" >/dev/null; then
               return 0
             fi
-            echo "ERROR: ${context} does not match the release tag, prerelease state, or exact release notes" >&2
-            jq -c '{tag_name, draft, prerelease}' \
+            echo "ERROR: ${context} does not match the release tag, immutable release state, or exact release notes" >&2
+            jq -c '{id, tag_name, draft, prerelease, immutable}' \
               <<< "${release_json}" >&2 || true
             return 1
+          }
+
+          verify_latest_release() {
+            local latest_release latest_status
+            set +e
+            latest_release="$(lookup_latest_release)"
+            latest_status=$?
+            set -e
+            if [[ "${expected_prerelease}" == "true" ]]; then
+              if [[ "${latest_status}" -eq "${LOOKUP_ABSENT}" ]]; then
+                return 0
+              fi
+              if [[ "${latest_status}" -ne 0 ]]; then
+                echo "ERROR: unable to prove the prerelease is not Latest" >&2
+                return 1
+              fi
+              if ! jq -e \
+                --argjson expected_id "${verified_release_id}" \
+                '(.id != $expected_id) and
+                 (.draft == false and .prerelease == false)' \
+                <<< "${latest_release}" >/dev/null; then
+                echo "ERROR: latest release unexpectedly resolves to the prerelease" >&2
+                return 1
+              fi
+              return 0
+            fi
+            if [[ "${latest_status}" -ne 0 ]]; then
+              echo "ERROR: unable to verify the stable release as Latest" >&2
+              return 1
+            fi
+            if ! jq -e \
+              --arg tag "${RELEASE_TAG}" \
+              --argjson expected_id "${verified_release_id}" \
+              '(.id == $expected_id) and
+               (.tag_name == $tag) and
+               (.draft == false and .prerelease == false) and
+               (.immutable == true)' \
+              <<< "${latest_release}" >/dev/null; then
+              echo "ERROR: stable release is not the repository Latest release" >&2
+              return 1
+            fi
           }
 
           verify_final_release() {
@@ -881,6 +982,12 @@ jobs:
               set -e
               if [[ "${final_status}" -eq 0 ]]; then
                 if ! verify_release "post-create release" "${final_release}"; then
+                  return 1
+                fi
+                if ! verified_release_id="$(jq -er \
+                  '.id | select(type == "number" and . > 0)' \
+                  <<< "${final_release}")"; then
+                  echo "ERROR: verified release ID is missing or invalid" >&2
                   return 1
                 fi
                 if [[ "${create_status}" -ne 0 ]]; then
@@ -902,6 +1009,7 @@ jobs:
             return 1
           }
 
+          verified_release_id=""
           release_was_absent=false
           set +e
           existing_release="$(lookup_release)"
@@ -928,7 +1036,7 @@ jobs:
                 --repo "${GITHUB_REPOSITORY}" \
                 --target "${SOURCE_SHA}" \
                 --verify-tag \
-                --prerelease \
+                "${release_state_args[@]}" \
                 --notes-file "${release_body_file}" \
                 --title "${RELEASE_TAG}" \
                 2>&1
@@ -942,3 +1050,4 @@ jobs:
           fi
 
           verify_final_release "${create_status}"
+          verify_latest_release

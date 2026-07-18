@@ -31,7 +31,7 @@ PINNED_TRIVY_IMAGE = (
     "aquasec/trivy:0.72.0@"
     "sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f"
 )
-PRERELEASE_STEP_NAME = "Verify or create idempotent GitHub prerelease"
+RELEASE_STEP_NAME = "Verify or create idempotent GitHub release"
 TEST_RELEASE_TAG = "v1.2.3-beta"
 TEST_TAG_OBJECT_SHA = "a" * 40
 TEST_SOURCE_SHA = "b" * 40
@@ -129,6 +129,8 @@ def run_existing_prerelease_guard(
     release: dict[str, object],
     *,
     curated_notes: str = "Human-written release notes.\n",
+    release_tag: str = "v0.1.11-beta",
+    latest_release: dict[str, object] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     workflow = load_workflow("publish-ghcr.yml")
     release_step = workflow["jobs"]["prerelease"]["steps"][-1]
@@ -148,6 +150,9 @@ while index < len(arguments):
     if argument == "--arg":
         variables[arguments[index + 1]] = arguments[index + 2]
         index += 3
+    elif argument == "--argjson":
+        variables[arguments[index + 1]] = json.loads(arguments[index + 2])
+        index += 3
     elif argument == "--rawfile":
         rawfiles[arguments[index + 1]] = open(
             arguments[index + 2], encoding="utf-8"
@@ -161,21 +166,45 @@ while index < len(arguments):
 
 payload = json.loads(sys.stdin.read())
 if 'type == "object"' in program:
-    required = ("tag_name", "target_commitish", "draft", "prerelease", "body")
+    required = ("id", "tag_name", "draft", "prerelease", "immutable", "body")
     valid = isinstance(payload, dict) and all(
         f'has("{name}")' not in program or name in payload for name in required
     )
+    if 'type == "number"' in program:
+        valid = valid and isinstance(payload.get("id"), int) and payload["id"] > 0
+    if '.immutable | type == "boolean"' in program:
+        valid = valid and isinstance(payload.get("immutable"), bool)
 elif ".tag_name == $tag" in program:
     valid = payload.get("tag_name") == variables["tag"]
+    if ".id == $expected_id" in program:
+        valid = valid and payload.get("id") == variables["expected_id"]
+    if ".id | type" in program:
+        valid = valid and isinstance(payload.get("id"), int) and payload["id"] > 0
     if ".target_commitish == $sha" in program:
         valid = valid and payload.get("target_commitish") == variables["sha"]
     valid = valid and payload.get("draft") is False
-    valid = valid and payload.get("prerelease") is True
-    valid = valid and str(payload.get("body") or "") == rawfiles["expected_body"]
-elif program.lstrip().startswith("{tag_name"):
+    if ".prerelease == $expected_prerelease" in program:
+        valid = valid and payload.get("prerelease") is variables["expected_prerelease"]
+    elif ".prerelease == false" in program:
+        valid = valid and payload.get("prerelease") is False
+    else:
+        valid = valid and payload.get("prerelease") is True
+    if ".immutable == true" in program:
+        valid = valid and payload.get("immutable") is True
+    if "expected_body" in rawfiles:
+        valid = valid and str(payload.get("body") or "") == rawfiles["expected_body"]
+elif ".id != $expected_id" in program:
+    valid = payload.get("id") != variables["expected_id"]
+    valid = valid and payload.get("draft") is False
+    valid = valid and payload.get("prerelease") is False
+elif ".id | select" in program:
+    valid = isinstance(payload.get("id"), int) and payload["id"] > 0
+    if valid:
+        print(payload["id"])
+elif program.lstrip().startswith(("{id", "{tag_name")):
     selected = {
         name: payload.get(name)
-        for name in ("tag_name", "target_commitish", "draft", "prerelease")
+        for name in ("id", "tag_name", "target_commitish", "draft", "prerelease", "immutable")
     }
     print(json.dumps(selected, separators=(",", ":")))
     valid = True
@@ -193,6 +222,10 @@ gh() {
       printf '%s' "${MOCK_CURATED_NOTES}"
       return 0
     fi
+    if [[ "$*" == *"/releases/latest"* ]]; then
+      printf '%s\n' "${MOCK_LATEST_RELEASE_JSON}"
+      return 0
+    fi
     printf '%s\n' "${MOCK_RELEASE_JSON}"
     return 0
   fi
@@ -203,21 +236,38 @@ jq() {
   "${PYTHON_EXE}" "${MOCK_JQ}" "$@"
 }
 """
+    if latest_release is None:
+        latest_release = (
+            {
+                "id": 19,
+                "tag_name": "v0.1.9-beta",
+                "draft": False,
+                "prerelease": False,
+                "immutable": True,
+                "body": "Previous stable release.",
+            }
+            if "-" in release_tag
+            else release
+        )
     environment = os.environ | {
         "GITHUB_REPOSITORY": "Herbertmt978/grott",
-        "RELEASE_TAG": "v0.1.11-beta",
+        "RELEASE_TAG": release_tag,
+        "EXPECTED_PRERELEASE": str("-" in release_tag).lower(),
         "SOURCE_SHA": "0311742803117428031174280311742803117428",
         "RUNTIME_IMAGE": "ghcr.io/herbertmt978/grott",
         "ADDON_IMAGE": "ghcr.io/herbertmt978/grott-ha-docker",
         "RUNTIME_DIGEST": "sha256:" + "a" * 64,
         "ADDON_DIGEST": "sha256:" + "b" * 64,
         "MOCK_RELEASE_JSON": json.dumps(release),
+        "MOCK_LATEST_RELEASE_JSON": json.dumps(latest_release),
         "MOCK_CURATED_NOTES": curated_notes,
         "MOCK_JQ": mock_jq.as_posix(),
         "PYTHON_EXE": Path(sys.executable).as_posix(),
     }
+    guard_script = tmp_path / "release_guard.sh"
+    guard_script.write_text(shell_prelude + release_step["run"], encoding="utf-8")
     return subprocess.run(
-        [find_usable_bash(), "-c", shell_prelude + release_step["run"]],
+        [find_usable_bash(), guard_script.as_posix()],
         cwd=ROOT,
         env=environment,
         text=True,
@@ -305,7 +355,7 @@ def run_remote_revalidation(
     workflow = load_workflow("publish-ghcr.yml")
     job_name = (
         "prerelease"
-        if step_name == "Revalidate remote tag before prerelease"
+        if step_name == "Revalidate remote tag before release"
         else "publish"
     )
     revalidation_step = next(
@@ -800,10 +850,10 @@ def test_publish_does_not_restore_dependency_caches_before_package_write() -> No
     assert "cache" not in setup_python.get("with", {})
 
 
-def test_publish_workflow_is_manual_only_serialized_by_requested_tag() -> None:
+def test_publish_workflow_is_manual_only_and_serialized_across_all_tags() -> None:
     workflow = load_workflow("publish-ghcr.yml")
     assert set(workflow_trigger(workflow)) == {"workflow_dispatch"}
-    assert "inputs.tag" in workflow["concurrency"]["group"]
+    assert workflow["concurrency"]["group"] == "publish-ghcr-release"
     assert workflow["concurrency"]["cancel-in-progress"] is False
 
 
@@ -822,7 +872,7 @@ def test_prerelease_records_verified_immutable_manifests_and_platforms() -> None
     create_step = next(
         step
         for step in prerelease_job["steps"]
-        if step.get("name") == PRERELEASE_STEP_NAME
+        if step.get("name") == RELEASE_STEP_NAME
     )
 
     assert publish_job["outputs"]["runtime_digest"] == (
@@ -863,7 +913,7 @@ def test_prerelease_fetches_curated_notes_from_verified_source_and_publishes_exa
     create_step = next(
         step
         for step in prerelease_job["steps"]
-        if step.get("name") == PRERELEASE_STEP_NAME
+        if step.get("name") == RELEASE_STEP_NAME
     )
     script = create_step["run"]
 
@@ -931,7 +981,7 @@ def test_prerelease_is_idempotent_and_verifies_exact_existing_release() -> None:
         'readonly LOOKUP_AMBIGUOUS=11',
         '.tag_name == $tag',
         '.draft == false',
-        '.prerelease == true',
+        '.prerelease == $expected_prerelease',
         '--rawfile expected_body "${release_body_file}"',
         '(.body // "") == $expected_body',
         'return "${LOOKUP_FAILED}"',
@@ -951,6 +1001,98 @@ def test_prerelease_is_idempotent_and_verifies_exact_existing_release() -> None:
     assert "An exact release now exists; accepting the idempotent retry" in script
 
 
+def test_release_creation_supports_stable_latest_and_prerelease_channels() -> None:
+    workflow = load_workflow("publish-ghcr.yml")
+    validate_job = workflow["jobs"]["validate"]
+    validation_step = next(
+        step
+        for step in validate_job["steps"]
+        if step.get("name") == "Validate requested release tag"
+    )
+    publish_job = workflow["jobs"]["publish"]
+    release_step = workflow["jobs"]["prerelease"]["steps"][-1]
+    script = release_step["run"]
+
+    assert validate_job["outputs"]["is_prerelease"] == (
+        "${{ steps.release_input.outputs.is_prerelease }}"
+    )
+    assert "is_prerelease=false" in validation_step["run"]
+    assert "is_prerelease=true" in validation_step["run"]
+    assert "is_prerelease=%s" in validation_step["run"]
+    assert publish_job["outputs"]["is_prerelease"] == (
+        "${{ needs.validate.outputs.is_prerelease }}"
+    )
+    assert release_step["env"]["EXPECTED_PRERELEASE"] == (
+        "${{ needs.publish.outputs.is_prerelease }}"
+    )
+    for token in (
+        'case "${EXPECTED_PRERELEASE}" in',
+        "expected_prerelease=true",
+        "expected_prerelease=false",
+        "release_state_args=(--prerelease --latest=false)",
+        "release_state_args=(--latest)",
+        '--argjson expected_prerelease "${expected_prerelease}"',
+        ".prerelease == $expected_prerelease",
+        '"${release_state_args[@]}"',
+        "verify_latest_release",
+        'repos/${GITHUB_REPOSITORY}/releases/latest',
+    ):
+        assert token in script
+    assert 'if [[ "${RELEASE_TAG}" == *-* ]]' not in script
+
+
+def test_release_creation_requires_immutable_release_and_exact_latest_identity() -> None:
+    workflow = load_workflow("publish-ghcr.yml")
+    script = workflow["jobs"]["prerelease"]["steps"][-1]["run"]
+
+    for token in (
+        'has("id")',
+        'has("immutable")',
+        ".immutable == true",
+        'verified_release_id="$(jq -er',
+        '--argjson expected_id "${verified_release_id}"',
+        ".id == $expected_id",
+        ".id != $expected_id",
+        "latest release unexpectedly resolves to the prerelease",
+    ):
+        assert token in script
+
+
+def test_existing_release_guard_accepts_matching_stable_release(
+    tmp_path: Path,
+) -> None:
+    curated_notes = "Human-written stable release notes.\n"
+    immutable_prefix = "\n".join(
+        (
+            "## Immutable release images",
+            "",
+            "- Runtime: ghcr.io/herbertmt978/grott@sha256:" + "a" * 64,
+            "- Home Assistant add-on: "
+            "ghcr.io/herbertmt978/grott-ha-docker@sha256:"
+            + "b" * 64,
+            "- Platforms: linux/amd64, linux/arm64, linux/arm/v7, linux/386",
+        )
+    )
+    release = {
+        "id": 120,
+        "tag_name": "v0.1.12",
+        "target_commitish": "master",
+        "draft": False,
+        "prerelease": False,
+        "immutable": True,
+        "body": immutable_prefix + "\n\n" + curated_notes,
+    }
+
+    completed = run_existing_prerelease_guard(
+        tmp_path,
+        release,
+        curated_notes=curated_notes,
+        release_tag="v0.1.12",
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
 @pytest.mark.parametrize(
     ("override", "accepted"),
     [
@@ -958,6 +1100,7 @@ def test_prerelease_is_idempotent_and_verifies_exact_existing_release() -> None:
         pytest.param({"tag_name": "v9.9.9-beta"}, False, id="wrong-tag"),
         pytest.param({"draft": True}, False, id="draft-release"),
         pytest.param({"prerelease": False}, False, id="not-prerelease"),
+        pytest.param({"immutable": False}, False, id="mutable-release"),
         pytest.param({"body": "mutable refs only"}, False, id="wrong-body"),
     ],
 )
@@ -978,10 +1121,12 @@ def test_existing_prerelease_guard_accepts_branch_target_only_when_release_match
     )
     body = immutable_prefix + "\n\n" + curated_notes
     release: dict[str, object] = {
+        "id": 111,
         "tag_name": "v0.1.11-beta",
         "target_commitish": "master",
         "draft": False,
         "prerelease": True,
+        "immutable": True,
         "body": body,
     }
     release.update(override)
@@ -1391,7 +1536,7 @@ def test_remote_revalidation_requires_exact_default_branch_tip(
     [
         "Revalidate remote tag before package login",
         "Revalidate remote tag before final promotion",
-        "Revalidate remote tag before prerelease",
+        "Revalidate remote tag before release",
     ],
 )
 @pytest.mark.parametrize(
@@ -1742,7 +1887,7 @@ def test_remote_tag_is_revalidated_against_source_sha_at_all_three_release_gates
     before_prerelease = prerelease_steps[-2]
     assert before_login["name"] == "Revalidate remote tag before package login"
     assert before_promotion["name"] == "Revalidate remote tag before final promotion"
-    assert before_prerelease["name"] == "Revalidate remote tag before prerelease"
+    assert before_prerelease["name"] == "Revalidate remote tag before release"
 
     for step in (before_login, before_promotion, before_prerelease):
         script = step["run"]
@@ -2042,12 +2187,15 @@ def test_validator_rejects_promotion_before_digest_verification(tmp_path: Path) 
         ("extra_packages_job", "exactly validate, gate, publish, and prerelease"),
         ("workflow_runtime_image", "canonical publish workflow hash"),
         ("workflow_addon_image", "canonical publish workflow hash"),
-        ("workflow_concurrency_run_id", "canonical publish workflow hash"),
+        ("workflow_concurrency_run_id", "serialize all release publications"),
         ("workflow_always_guard", "canonical publish workflow hash"),
         ("workflow_build_secrets", "canonical publish workflow hash"),
         ("dispatch_versioned_description", "tag description must be version-neutral"),
         ("publish_runtime_digest_output", "verified runtime and add-on digest outputs"),
         ("publish_addon_digest_output", "verified runtime and add-on digest outputs"),
+        ("validate_release_mode_output", "validated prerelease mode"),
+        ("publish_release_mode_output", "validated release outputs"),
+        ("prerelease_release_mode_env", "trusted validated prerelease mode"),
         ("prerelease_runtime_digest_env", "prerelease digest inputs"),
         ("prerelease_addon_digest_env", "prerelease digest inputs"),
         ("prerelease_weak_digest_pattern", "fail closed on invalid digest syntax"),
@@ -2072,7 +2220,13 @@ def test_validator_rejects_promotion_before_digest_verification(tmp_path: Path) 
         ("prerelease_generate_notes", "must not use generated release notes"),
         ("prerelease_missing_existing_guard", "exact existing-release guard"),
         ("prerelease_loose_existing_tag", "matching release tag"),
-        ("prerelease_loose_existing_state", "non-draft prerelease state"),
+        ("prerelease_loose_existing_state", "non-draft stable or prerelease state"),
+        ("prerelease_missing_immutable_schema", "typed release ID and immutable state"),
+        ("prerelease_mutable_allowed", "immutable published release"),
+        ("prerelease_no_stable_channel", "stable and prerelease channels"),
+        ("prerelease_no_latest_verification", "verify stable releases as Latest"),
+        ("prerelease_loose_latest_identity", "exact stable release ID as Latest"),
+        ("prerelease_can_be_latest", "prove prereleases are not Latest"),
         ("prerelease_loose_existing_body", "exact full release body"),
         ("prerelease_swallow_lookup_errors", "explicit absence from lookup failure"),
         ("prerelease_no_post_verify", "post-verify the final prerelease"),
@@ -2250,7 +2404,7 @@ def test_canonical_validator_kills_release_policy_mutations(
             jobs["prerelease"]["steps"] = [
                 step
                 for step in prerelease_steps
-                if step.get("name") != "Revalidate remote tag before prerelease"
+                if step.get("name") != "Revalidate remote tag before release"
             ]
         elif mutation_name == "prerelease_remote_reordered":
             jobs["prerelease"]["steps"].reverse()
@@ -2420,17 +2574,23 @@ def test_canonical_validator_kills_release_policy_mutations(
                 "publish_addon_digest_output": "addon_digest",
             }[mutation_name]
             publish_job["outputs"][output] = "sha256:" + "0" * 64
+        elif mutation_name == "validate_release_mode_output":
+            jobs["validate"]["outputs"]["is_prerelease"] = "false"
+        elif mutation_name == "publish_release_mode_output":
+            publish_job["outputs"]["is_prerelease"] = "false"
         elif mutation_name.startswith("prerelease_"):
             create_step = next(
                 step
                 for step in jobs["prerelease"]["steps"]
                 if step.get("name")
-                == PRERELEASE_STEP_NAME
+                == RELEASE_STEP_NAME
             )
             if mutation_name == "prerelease_runtime_digest_env":
                 create_step["env"]["RUNTIME_DIGEST"] = "sha256:" + "0" * 64
             elif mutation_name == "prerelease_addon_digest_env":
                 create_step["env"]["ADDON_DIGEST"] = "sha256:" + "1" * 64
+            elif mutation_name == "prerelease_release_mode_env":
+                create_step["env"]["EXPECTED_PRERELEASE"] = "false"
             elif mutation_name == "prerelease_weak_digest_pattern":
                 create_step["run"] = create_step["run"].replace(
                     "^sha256:[0-9a-f]{64}$", ".*", 1
@@ -2487,7 +2647,35 @@ def test_canonical_validator_kills_release_policy_mutations(
                 )
             elif mutation_name == "prerelease_loose_existing_state":
                 create_step["run"] = create_step["run"].replace(
-                    ".draft == false and .prerelease == true", "true", 1
+                    ".draft == false and .prerelease == $expected_prerelease",
+                    "true",
+                    1,
+                )
+            elif mutation_name == "prerelease_missing_immutable_schema":
+                create_step["run"] = create_step["run"].replace(
+                    'has("immutable")', "true", 1
+                )
+            elif mutation_name == "prerelease_mutable_allowed":
+                create_step["run"] = create_step["run"].replace(
+                    ".immutable == true", "true", 1
+                )
+            elif mutation_name == "prerelease_no_stable_channel":
+                create_step["run"] = create_step["run"].replace(
+                    "release_state_args=(--latest)",
+                    "release_state_args=(--prerelease)",
+                    1,
+                )
+            elif mutation_name == "prerelease_no_latest_verification":
+                create_step["run"] = create_step["run"].replace(
+                    '\nverify_latest_release\n', "\ntrue\n", 1
+                )
+            elif mutation_name == "prerelease_loose_latest_identity":
+                create_step["run"] = create_step["run"].replace(
+                    ".id == $expected_id", "true", 1
+                )
+            elif mutation_name == "prerelease_can_be_latest":
+                create_step["run"] = create_step["run"].replace(
+                    ".id != $expected_id", "true", 1
                 )
             elif mutation_name == "prerelease_loose_existing_body":
                 create_step["run"] = create_step["run"].replace(
@@ -2521,8 +2709,8 @@ def test_canonical_validator_kills_release_policy_mutations(
                 "noop_conflict_guard": "Guard final tags against conflicting digests",
                 "noop_promotion": "Promote verified digests to release tags",
                 "noop_postverify": "Verify promoted release tags",
-                "noop_prerelease_remote": "Revalidate remote tag before prerelease",
-                    "noop_release_create": PRERELEASE_STEP_NAME,
+                "noop_prerelease_remote": "Revalidate remote tag before release",
+                "noop_release_create": RELEASE_STEP_NAME,
             }[mutation_name]
             if mutation_name in {"noop_prerelease_remote", "noop_release_create"}:
                 target_job = jobs["prerelease"]

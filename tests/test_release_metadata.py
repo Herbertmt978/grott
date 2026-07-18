@@ -72,17 +72,16 @@ def test_current_release_metadata_is_aligned() -> None:
     assert compose["services"]["grott"]["image"] == (
         f"ghcr.io/herbertmt978/grott:{release_version}"
     )
-    assert f"current release candidate is `v{release_version}`" in readme
+    assert f"current beta line is `v{release_version}`" in readme
     assert f"docs/releases/v{release_version}.md" in readme
-    assert f"/releases/tag/v{release_version}" not in readme
     assert f"ghcr.io/herbertmt978/grott:{release_version}" in readme
-    assert f"Supported release candidate: `{release_version}`" in addon_docs
+    assert f"Current beta line: `{release_version}`" in addon_docs
     assert "latest supported release is `v0.1.9-beta`" in readme
     assert "`v0.1.10-beta` and `v0.1.11-beta` remain published prereleases" in readme
-    assert "unpublished local UAT candidate" in readme
+    assert "owner explicitly waived the remaining observation window" in readme
     assert "Releases page is the supported-availability authority" in readme
     assert "does not prove that GHCR tags are absent" in readme
-    assert "unpublished-candidate examples only" in readme
+    assert "pre-publication examples only" in readme
 
 
 def test_changelog_has_empty_unreleased_then_prepared_candidate() -> None:

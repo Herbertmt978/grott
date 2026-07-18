@@ -108,7 +108,7 @@ Use a private test VM or explicitly authorized Home Assistant test window. Never
 6. Compare the same values with ShinePhone and confirm ShinePhone continues receiving fresh data through the proxy path.
 7. Check Home Assistant Repairs before and after the test. Any new Grott unit, device-class, or statistics warning is a failed UAT result.
 8. Restart the candidate once and confirm it recovers, republishes MQTT discovery without duplicate entities, and forwards packets normally.
-9. Keep this exact local image running for the owner-approved 24-hour soak. Do not push a branch or make any other GitHub change during that window.
+9. Complete the owner-selected observation window or record an explicit owner waiver with the evidence available at that decision. For `v0.1.12-beta`, the owner explicitly waived the remaining planned 24-hour window on 2026-07-18 after the exact candidate passed a restart, 164 successful state publications across both MOD devices, retained `[32, 32]` discovery, and zero runtime errors. This waiver does not waive any other gate in this runbook.
 10. Stop immediately and follow **Rollback** if parsing, forwarding, MQTT output, health, Home Assistant Repairs, or ShinePhone behavior regresses.
 
 Record the exact candidate image ID, source SHA, architecture, Home Assistant version, add-on options (with secrets redacted), test timestamps, and rollback result.

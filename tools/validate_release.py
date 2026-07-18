@@ -342,22 +342,21 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
 
     require(
         errors,
-        f"current release candidate is `v{addon_version}`" in readme
-        and f"/releases/tag/v{addon_version}" not in readme
+        f"current beta line is `v{addon_version}`" in readme
         and f"{EXPECTED_RUNTIME_IMAGE}:{addon_version}" in readme
         and "latest supported release is `v0.1.9-beta`" in readme
         and "`v0.1.10-beta` and `v0.1.11-beta` remain published prereleases"
         in readme
-        and "unpublished local UAT candidate" in readme
+        and "owner explicitly waived the remaining observation window" in readme
         and "Releases page is the supported-availability authority" in readme
         and "does not prove that GHCR tags are absent" in readme
-        and "unpublished-candidate examples only" in readme,
+        and "pre-publication examples only" in readme,
         "README current release and install image must match the release candidate",
     )
     require(
         errors,
-        f"Supported release candidate: `{addon_version}`" in addon_docs,
-        "add-on operator docs must identify the supported release candidate",
+        f"Current beta line: `{addon_version}`" in addon_docs,
+        "add-on operator docs must identify the current beta line",
     )
     dockerignore_lines = [line.strip() for line in dockerignore.splitlines()]
     layout_context_lines = [

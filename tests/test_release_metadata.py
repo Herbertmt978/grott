@@ -12,14 +12,14 @@ from tools import validate_release
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RELEASE_PREPARED_DATE = "2026-07-14"
-CURRENT_RELEASE_VERSION = "0.1.11-beta"
+RELEASE_PREPARED_DATE = "2026-07-18"
+CURRENT_RELEASE_VERSION = "0.1.12-beta"
 CURRENT_RELEASE_TAG = f"v{CURRENT_RELEASE_VERSION}"
 ROLLBACK_RUNTIME_DIGEST = (
-    "sha256:e9314693651e0cce82c603b53f88c66ae4757d93e09b97a24c56070c845d2351"
+    "sha256:872ca78235cd6552b26f16dcd0de17ce18288fc92ffa82e31435c7651e619b6c"
 )
 ROLLBACK_ADDON_DIGEST = (
-    "sha256:7c55c161195eccd5d93bd22576bee2ea2958f68a380087eb6694d103bcfafbb1"
+    "sha256:4446cbcfe83c00e8c667101067fc0643afded0b6338f1d6c76ba6af113c13831"
 )
 
 
@@ -51,7 +51,7 @@ def copy_release_metadata(destination: Path) -> None:
     )
 
 
-def test_release_preparation_targets_v011_beta() -> None:
+def test_release_preparation_targets_v012_beta() -> None:
     assert canonical_release_version() == CURRENT_RELEASE_VERSION
     assert curated_release_notes_path().name == f"{CURRENT_RELEASE_TAG}.md"
 
@@ -72,16 +72,40 @@ def test_current_release_metadata_is_aligned() -> None:
     assert compose["services"]["grott"]["image"] == (
         f"ghcr.io/herbertmt978/grott:{release_version}"
     )
-    assert f"current release candidate is `v{release_version}`" in readme
+    assert f"current beta line is `v{release_version}`" in readme
     assert f"docs/releases/v{release_version}.md" in readme
-    assert f"/releases/tag/v{release_version}" not in readme
     assert f"ghcr.io/herbertmt978/grott:{release_version}" in readme
-    assert f"Supported release candidate: `{release_version}`" in addon_docs
+    assert f"Current beta line: `{release_version}`" in addon_docs
     assert "latest supported release is `v0.1.9-beta`" in readme
-    assert "`v0.1.10-beta` remains a prerelease" in readme
+    assert "`v0.1.10-beta` and `v0.1.11-beta` remain published prereleases" in readme
+    assert "owner explicitly waived the remaining observation window" in readme
     assert "Releases page is the supported-availability authority" in readme
     assert "does not prove that GHCR tags are absent" in readme
-    assert "preparation examples only" in readme
+    assert "pre-publication examples only" in readme
+    lifecycle_docs = f"{readme}\n{addon_docs}".lower()
+    assert not any(
+        phrase in lifecycle_docs
+        for phrase in validate_release.STALE_WAIVER_LIFECYCLE_PHRASES
+    )
+
+
+@pytest.mark.parametrize(
+    "stale_wording",
+    validate_release.STALE_WAIVER_LIFECYCLE_PHRASES,
+)
+def test_release_validator_rejects_stale_waiver_lifecycle_wording(
+    tmp_path: Path, stale_wording: str
+) -> None:
+    copy_release_metadata(tmp_path)
+    readme_path = tmp_path / "README.md"
+    readme_path.write_text(
+        readme_path.read_text(encoding="utf-8") + f"\n{stale_wording}\n",
+        encoding="utf-8",
+    )
+
+    errors = validate_release.validate_worktree(tmp_path)
+
+    assert any("stale pre-publication lifecycle wording" in error for error in errors)
 
 
 def test_changelog_has_empty_unreleased_then_prepared_candidate() -> None:
@@ -96,9 +120,9 @@ def test_changelog_has_empty_unreleased_then_prepared_candidate() -> None:
     release_section = changelog.split(
         f"## {release_version} - prepared {RELEASE_PREPARED_DATE}", 1
     )[1].split("\n## ", 1)[0]
-    assert "source-identical" in release_section
-    assert "non-root" in release_section
-    assert "parser" in release_section.lower()
+    assert "reviewed three-file allowlist" in release_section
+    assert "built-in layouts" in release_section
+    assert "fixture" in release_section.lower()
     assert "not a claim that the beta has been published" in release_section
 
 
@@ -145,24 +169,26 @@ def test_curated_release_notes_are_human_written_and_versioned() -> None:
         assert user_topic.lower() in text.lower()
 
 
-def test_v011_release_notes_cover_issue_6_and_safe_upgrade_contract() -> None:
+def test_v012_release_notes_cover_layout_packaging_and_safe_upgrade_contract() -> None:
     path = ROOT / "docs" / "releases" / f"{CURRENT_RELEASE_TAG}.md"
     assert path.is_file(), f"missing {path.relative_to(ROOT)}"
     text = path.read_text(encoding="utf-8")
     normalized = text.lower()
 
     for required in (
-        "issue #6",
+        "packaged example layouts",
+        "sph battery soc",
+        "64 as 0.64",
+        "min",
+        "tl3",
+        "t060120",
+        "reviewed three-file allowlist",
+        "final-image validator",
+        "fixture/container tested",
+        "not real-hardware tested",
         "32 entities",
         "v0_1_9_standard",
-        "opt-in",
-        "all map",
-        "raw packet",
-        "parsing",
-        "forwarding",
-        "state data",
         "retained discovery cleanup",
-        "metadata",
         "upgrade",
         "rollback",
         "supported-availability authority",
@@ -170,7 +196,7 @@ def test_v011_release_notes_cover_issue_6_and_safe_upgrade_contract() -> None:
         "next live packet",
         "image rollback does not restore",
         "home assistant repairs",
-        "changes carried forward from v0.1.10-beta",
+        "changes carried forward from v0.1.11-beta",
         "tcp frame reassembly",
         "safe literal",
         "non-root",
@@ -230,7 +256,8 @@ def test_release_validator_rejects_invalid_curated_notes(
     "required_token",
     (
         "supported-availability authority",
-        "Changes carried forward from v0.1.10-beta",
+        "reviewed three-file allowlist",
+        "Changes carried forward from v0.1.11-beta",
         "next live packet",
         "Home Assistant Repairs",
     ),
@@ -283,7 +310,7 @@ def test_operator_docs_cover_runtime_filesystem_constraints_and_rollback() -> No
             text,
         )
     for text in (readme, addon_docs, releasing):
-        assert "0.1.9-beta" in text
+        assert "0.1.11-beta" in text
     assert ROLLBACK_RUNTIME_DIGEST in readme
     assert ROLLBACK_ADDON_DIGEST in addon_docs
     assert ROLLBACK_RUNTIME_DIGEST in releasing
@@ -349,17 +376,54 @@ def test_legal_status_records_permission_and_commercial_use_limit() -> None:
         assert "No public redistribution release may be made until" not in text
 
 
-def test_release_validator_rejects_packaged_sparse_generic_override(tmp_path: Path) -> None:
+def test_release_validator_rejects_incomplete_layout_allowlist(tmp_path: Path) -> None:
     copy_release_metadata(tmp_path)
     path = tmp_path / ".dockerignore"
     text = path.read_text(encoding="utf-8").replace(
-        "/examples/Record Layout/t06NNNNX.json\n", "", 1
+        "!/examples/Record Layout/T06221b.json\n", "", 1
     )
     path.write_text(text, encoding="utf-8")
 
     errors = validate_release.validate_worktree(tmp_path)
 
-    assert any("generic layout override" in error.lower() for error in errors), errors
+    assert any("reviewed layout allowlist" in error.lower() for error in errors), errors
+
+
+def test_release_validator_rejects_bulk_external_layout_copy(tmp_path: Path) -> None:
+    copy_release_metadata(tmp_path)
+    path = tmp_path / "docker" / "dockerfile"
+    text = path.read_text(encoding="utf-8").replace(
+        validate_release.REVIEWED_LAYOUT_COPY,
+        'COPY ["examples/Record Layout/", "/app/"]',
+        1,
+    )
+    path.write_text(text, encoding="utf-8")
+
+    errors = validate_release.validate_worktree(tmp_path)
+
+    assert any("reviewed external layout allowlist" in error for error in errors), errors
+
+
+def test_release_validator_rejects_add_and_broad_context_reinclude(
+    tmp_path: Path,
+) -> None:
+    copy_release_metadata(tmp_path)
+    path = tmp_path / "docker" / "dockerfile"
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        + '\nADD ["examples/Record Layout/", "/app/"]\n',
+        encoding="utf-8",
+    )
+    dockerignore_path = tmp_path / ".dockerignore"
+    dockerignore_path.write_text(
+        dockerignore_path.read_text(encoding="utf-8") + "\n!/examples/**\n",
+        encoding="utf-8",
+    )
+
+    errors = validate_release.validate_worktree(tmp_path)
+
+    assert any("Dockerfile ADD" in error for error in errors), errors
+    assert any("reviewed layout allowlist" in error for error in errors), errors
 
 
 def test_issue_template_version_examples_are_version_neutral() -> None:

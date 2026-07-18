@@ -60,7 +60,7 @@ COPY grott.py grottconf.py grottdata.py grottlayout.py grottprotocol.py grottpro
 COPY grottext /app/grottext
 COPY examples/grott.ini /app/grott.ini
 COPY ["examples/Home Assistent/grott_ha.py", "/app/grott_ha.py"]
-COPY ["examples/Record Layout/", "/app/"]
+COPY ["examples/Record Layout/T06NNNNXMOD.json", "examples/Record Layout/t060103xmax3.json", "examples/Record Layout/T06221b.json", "/app/"]
 COPY tools/container_healthcheck.py /usr/local/bin/container_healthcheck.py
 COPY tools/validate_container_artifact.py /usr/local/bin/validate_container_artifact.py
 

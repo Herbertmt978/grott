@@ -292,3 +292,46 @@ def test_validator_rejects_remote_clone_or_mutable_addon_base(monkeypatch, tmp_p
 
     assert any("pinned Python base" in error for error in errors)
     assert any("repository root context" in error for error in errors)
+
+
+def test_validator_rejects_bulk_external_layout_copy(monkeypatch, tmp_path):
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text(
+        (ADDON_DIR / "Dockerfile")
+        .read_text(encoding="utf-8")
+        .replace(
+            validator.REVIEWED_LAYOUT_COPY,
+            'COPY ["examples/Record Layout/", "/app/"]',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(validator, "DOCKERFILE_PATH", dockerfile)
+    errors = []
+
+    validator.validate_files(errors)
+
+    assert any("reviewed external layout allowlist" in error for error in errors), errors
+
+
+def test_validator_rejects_add_and_broad_context_reinclude(monkeypatch, tmp_path):
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text(
+        (ADDON_DIR / "Dockerfile").read_text(encoding="utf-8")
+        + '\nADD ["examples/Record Layout/", "/app/"]\n',
+        encoding="utf-8",
+    )
+    dockerignore = tmp_path / ".dockerignore"
+    dockerignore.write_text(
+        validator.DOCKERIGNORE_PATH.read_text(encoding="utf-8")
+        + "\n!/examples/**\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(validator, "DOCKERFILE_PATH", dockerfile)
+    monkeypatch.setattr(validator, "DOCKERIGNORE_PATH", dockerignore)
+    errors = []
+
+    validator.validate_files(errors)
+
+    assert any("Dockerfile ADD" in error for error in errors), errors
+    assert any("reviewed layout allowlist" in error for error in errors), errors

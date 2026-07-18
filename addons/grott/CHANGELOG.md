@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.1.12-beta - prepared 2026-07-18
+
+This is the preparation date, not a claim that the beta has been published. Check the GitHub Releases page for availability.
+
+- Replace bulk packaging of example record layouts with a reviewed three-file allowlist shared by the runtime and Home Assistant add-on images.
+- Preserve Grott's built-in layouts for SPH, MIN, TL3, and T060120 packets so packaged examples cannot silently change offsets, numeric types, included fields, or dividers.
+- Validate the exact final-image layout set and reject built-in overrides, duplicate external layout keys, unexpected files, malformed JSON, and loader-visible disguised JSON filenames.
+- Cover unavailable inverter families with fixture/container tests while retaining the real two-inverter MOD UAT and the `v0.1.11-beta` rollback evidence.
+- Record the owner's explicit waiver of the remaining observation window after the exact local candidate passed restart, two-device state publication, retained `[32, 32]` discovery, and zero-error checks; all other release gates remain required.
+
 ## 0.1.11-beta - prepared 2026-07-14
 
 This is the preparation date, not a claim that the beta has been published. Check the GitHub Releases page for availability.

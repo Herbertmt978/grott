@@ -9,8 +9,12 @@
 /wiki
 /documentatie
 
-# Keep Grott's verified built-in 31-field T06NNNNX layout authoritative.
-/examples/Record Layout/t06NNNNX.json
+# Package only reviewed external layouts. The examples directory contains
+# alternative definitions that are not safe to auto-load together.
+/examples/Record Layout/*
+!/examples/Record Layout/T06NNNNXMOD.json
+!/examples/Record Layout/t060103xmax3.json
+!/examples/Record Layout/T06221b.json
 
 # Local operator configuration and environment files must never enter BuildKit.
 **/grott.ini

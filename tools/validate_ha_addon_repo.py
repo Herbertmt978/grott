@@ -16,6 +16,24 @@ ADDON_DIR = ROOT / "addons" / "grott"
 CONFIG_PATH = ADDON_DIR / "config.yaml"
 REPOSITORY_PATH = ROOT / "repository.yaml"
 DOCKERFILE_PATH = ADDON_DIR / "Dockerfile"
+REVIEWED_LAYOUT_COPY = (
+    'COPY ["examples/Record Layout/T06NNNNXMOD.json", '
+    '"examples/Record Layout/t060103xmax3.json", '
+    '"examples/Record Layout/T06221b.json", "/app/"]'
+)
+REVIEWED_LAYOUT_CONTEXT_LINES = (
+    "/examples/Record Layout/*",
+    "!/examples/Record Layout/T06NNNNXMOD.json",
+    "!/examples/Record Layout/t060103xmax3.json",
+    "!/examples/Record Layout/T06221b.json",
+)
+REVIEWED_DOCKERIGNORE_NEGATIONS = (
+    "!/examples/Record Layout/T06NNNNXMOD.json",
+    "!/examples/Record Layout/t060103xmax3.json",
+    "!/examples/Record Layout/T06221b.json",
+    "!/examples/grott.ini",
+    "!/.env.example",
+)
 RUN_PATH = ADDON_DIR / "run.sh"
 DOCKERIGNORE_PATH = ROOT / ".dockerignore"
 LEGACY_RPI_DOCKERFILE_PATH = ROOT / "docker" / "dockerrpi"
@@ -193,16 +211,40 @@ def validate_files(errors: list[str]) -> None:
         and "COPY requirements.lock " in dockerfile,
         "Dockerfile must build from the reviewed repository root context without a remote clone",
     )
+    dockerfile_lines = [line.strip() for line in dockerfile.splitlines()]
     require(
         errors,
-        'COPY ["examples/Record Layout/", "/app/"]' in dockerfile,
-        "Dockerfile must include bundled external layout JSON files",
+        not any(re.match(r"(?i)^ADD(?:\s|\[)", line) for line in dockerfile_lines),
+        "Dockerfile ADD instructions are forbidden in reviewed container sources",
+    )
+    layout_reference_lines = [
+        line.strip()
+        for line in dockerfile_lines
+        if re.search(r"record(?:\s|\\)+layout", line, re.IGNORECASE)
+    ]
+    require(
+        errors,
+        layout_reference_lines == [REVIEWED_LAYOUT_COPY],
+        "Dockerfile must use the exact reviewed external layout allowlist",
     )
     dockerignore = DOCKERIGNORE_PATH.read_text(encoding="utf-8")
+    dockerignore_lines = [line.strip() for line in dockerignore.splitlines()]
+    layout_context_lines = [
+        line.strip()
+        for line in dockerignore_lines
+        if line.strip().startswith("/examples/Record Layout/")
+        or line.strip().startswith("!/examples/Record Layout/")
+    ]
     require(
         errors,
-        "/examples/Record Layout/t06NNNNX.json" in dockerignore,
-        "Docker build context must exclude the conflicting generic layout override",
+        layout_context_lines == list(REVIEWED_LAYOUT_CONTEXT_LINES),
+        "Docker build context must use the exact reviewed layout allowlist",
+    )
+    require(
+        errors,
+        [line for line in dockerignore_lines if line.startswith("!")]
+        == list(REVIEWED_DOCKERIGNORE_NEGATIONS),
+        "Docker build context negations must match the reviewed layout allowlist",
     )
     require(
         errors,

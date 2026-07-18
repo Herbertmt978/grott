@@ -2,17 +2,17 @@
 
 Grott HA Docker is a beta Home Assistant add-on for Growatt/ShineWiFi telemetry. It runs Grott in proxy mode, forwards packets to Growatt, and publishes sane Home Assistant MQTT discovery using guarded layout selection.
 
-The latest supported release is `0.1.9-beta`; `0.1.10-beta` remains prerelease testing. Supported release candidate: `0.1.11-beta`, currently held for compatibility and Home Assistant Repairs UAT. Its [human-written release notes](../../docs/releases/v0.1.11-beta.md) explain each problem, fix, reason, and user benefit. Only after its publication gates pass and a new owner decision is recorded will this add-on use `ghcr.io/herbertmt978/grott-ha-docker:0.1.11-beta`; Home Assistant selects the image tag matching the add-on version instead of building on the HA box.
+The latest supported release is `0.1.9-beta`; `0.1.10-beta` and `0.1.11-beta` remain published prereleases. Current beta line: `0.1.12-beta`, containing the external-layout packaging correction. On 2026-07-18, the owner explicitly waived the remaining observation window after the exact local candidate passed restart, two-device state publication, retained `[32, 32]` discovery, and zero-error checks; every other publication gate remains mandatory. Its [human-written release notes](../../docs/releases/v0.1.12-beta.md) explain the problem, fix, reason, evidence, and user benefit. When the matching GitHub prerelease exists, this add-on uses `ghcr.io/herbertmt978/grott-ha-docker:0.1.12-beta`; Home Assistant selects the image tag matching the add-on version instead of building on the HA box.
 
-This release is beta software. It has been tested with a real ShineWiFi/SPH Home Assistant setup and the packet fixtures in the repository, but other Growatt inverter families may still need new sanitized fixtures before every sensor is correct.
+This release is beta software. The current beta line has been tested with two real ShineWiFi/MOD inverters. SPH, MIN, TL3, T060120, and other unavailable families are fixture/container tested, not real-hardware tested, and may still need new sanitized fixtures before every sensor is correct.
 
 | Version domain | Version | Meaning |
 | --- | --- | --- |
-| Fork/add-on release | `0.1.11-beta` | The candidate add-on metadata and matching fork image. |
+| Fork/add-on release | `0.1.12-beta` | The current beta metadata and matching release image, supported only when its GitHub prerelease exists. |
 | Bundled Grott core (upstream startup version) | `2.8.3` | The version printed at startup by the inherited Grott entry point, with this fork's fixes applied on top. |
 | Bundled Home Assistant extension | `0.0.8` | The in-repository MQTT discovery and state extension. |
 
-`0.1.1-beta` was skipped for users because its first multi-architecture image publish failed. The exact previous rollback version is `0.1.9-beta`.
+`0.1.1-beta` was skipped for users because its first multi-architecture image publish failed. The exact previous live rollback version for this candidate is `0.1.11-beta`; `0.1.9-beta` remains Latest.
 
 The public tag may not exist until every release gate passes. On 2026-07-14, the fork owner confirmed that upstream redistribution permission has been obtained for this fork and its container images. That permission does not authorize commercial use or reuse unless Johan Meijer has separately agreed, and any financial reward or appreciation is directed to him. See the root `RELEASING.md`, `docs/LEGAL.md`, and [johanmeijer/grott#512](https://github.com/johanmeijer/grott/issues/512).
 
@@ -165,20 +165,20 @@ Use `--keep pvpowerout,SOC` instead of `--all` when you want to preserve known-g
 
 Before testing this candidate, create and verify the named full Home Assistant backup **Grott pre-update rollback** as described above. Without that verified backup, UAT must not begin. If UAT fails:
 
-1. Stop `0.1.11-beta` so it releases TCP port `5279`.
+1. Stop `0.1.12-beta` so it releases TCP port `5279`.
 2. Restore **Grott pre-update rollback** by its recorded backup ID; this is the only supported Home Assistant rollback path.
 3. Confirm the restored add-on options before starting anything.
 4. Start exactly one Grott listener or forwarder on port `5279`.
 5. Wait for a new packet and confirm `grott_last_push` advances.
 6. Compare representative Home Assistant values with ShinePhone, confirm ShinePhone continues updating, and verify Home Assistant Repairs and retained MQTT state returned to the recorded baseline.
 
-For evidence, the independently verified previous `0.1.9-beta` add-on manifest is:
+For evidence, the independently verified previous live `0.1.11-beta` add-on manifest is:
 
 ```text
-ghcr.io/herbertmt978/grott-ha-docker@sha256:7c55c161195eccd5d93bd22576bee2ea2958f68a380087eb6694d103bcfafbb1
+ghcr.io/herbertmt978/grott-ha-docker@sha256:4446cbcfe83c00e8c667101067fc0643afded0b6338f1d6c76ba6af113c13831
 ```
 
-Both `ghcr.io/herbertmt978/grott-ha-docker:0.1.9-beta` and `:v0.1.9-beta` resolved to that four-platform manifest on 2026-07-13. The matching Docker runtime rollback manifest is `ghcr.io/herbertmt978/grott@sha256:e9314693651e0cce82c603b53f88c66ae4757d93e09b97a24c56070c845d2351`.
+Both `ghcr.io/herbertmt978/grott-ha-docker:0.1.11-beta` and `:v0.1.11-beta` resolved to that four-platform manifest on 2026-07-18. The matching Docker runtime rollback manifest is `ghcr.io/herbertmt978/grott@sha256:872ca78235cd6552b26f16dcd0de17ce18288fc92ffa82e31435c7651e619b6c`.
 
 The digest is verification evidence only; the current add-on repository does not provide historical-version reinstall as a supported rollback path.
 

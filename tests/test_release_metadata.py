@@ -82,6 +82,30 @@ def test_current_release_metadata_is_aligned() -> None:
     assert "Releases page is the supported-availability authority" in readme
     assert "does not prove that GHCR tags are absent" in readme
     assert "pre-publication examples only" in readme
+    lifecycle_docs = f"{readme}\n{addon_docs}".lower()
+    assert not any(
+        phrase in lifecycle_docs
+        for phrase in validate_release.STALE_WAIVER_LIFECYCLE_PHRASES
+    )
+
+
+@pytest.mark.parametrize(
+    "stale_wording",
+    validate_release.STALE_WAIVER_LIFECYCLE_PHRASES,
+)
+def test_release_validator_rejects_stale_waiver_lifecycle_wording(
+    tmp_path: Path, stale_wording: str
+) -> None:
+    copy_release_metadata(tmp_path)
+    readme_path = tmp_path / "README.md"
+    readme_path.write_text(
+        readme_path.read_text(encoding="utf-8") + f"\n{stale_wording}\n",
+        encoding="utf-8",
+    )
+
+    errors = validate_release.validate_worktree(tmp_path)
+
+    assert any("stale pre-publication lifecycle wording" in error for error in errors)
 
 
 def test_changelog_has_empty_unreleased_then_prepared_candidate() -> None:

@@ -16,9 +16,9 @@ The latest supported release is `v0.1.9-beta`. `v0.1.10-beta` and `v0.1.11-beta`
 | Bundled Grott core (upstream startup version) | `2.8.3` | The version printed by the inherited Grott entry point; fork fixes are carried on top of that core. |
 | Bundled Home Assistant extension | `0.0.8` | The in-repository `grott_ha.py` extension used for MQTT discovery and state. |
 
-This is beta software. The current candidate is being tested with two real ShineWiFi/MOD inverters and with sanitized layout fixtures for generic, SPH, SPA, TL3, MIN, and T060120-style packets. Fixture/container coverage is not real-hardware validation for those other families, so treat new hardware combinations as testing until values have been compared with ShinePhone.
+This is beta software. The current beta line has been tested with two real ShineWiFi/MOD inverters and with sanitized layout fixtures for generic, SPH, SPA, TL3, MIN, and T060120-style packets. Fixture/container coverage is not real-hardware validation for those other families, so treat new hardware combinations as testing until values have been compared with ShinePhone.
 
-Previously published beta images are available on GHCR. The local `0.1.12-beta` candidate targets the same platform set, but its images must not be published until the VM soak and release gates pass:
+Published beta images are available on GHCR. The `0.1.12-beta` image targets the same platform set and is supported only when its matching entry exists on this repository's Releases page; publication remains subject to every gate in [RELEASING.md](RELEASING.md):
 
 - `amd64`
 - `aarch64`
@@ -146,7 +146,7 @@ The examples use placeholders and contain no real or stable device identifiers.
 
 Use this if Grott will run on a separate Linux server, NAS, or VM.
 
-**Availability check:** the repository image below is intentionally unavailable during local UAT. Do not run it until `v0.1.12-beta` appears on this repository's Releases page. The hardened settings are qualified with the matching `0.1.12-beta` image and should not be assumed to work unchanged with an older image.
+**Availability check:** use the repository image below only when `v0.1.12-beta` appears on this repository's Releases page. Until that entry exists, the image is unsupported even if a GHCR tag is temporarily visible during promotion. The hardened settings are qualified with the matching `0.1.12-beta` image and should not be assumed to work unchanged with an older image.
 
 Create `docker-compose.yml`:
 

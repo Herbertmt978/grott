@@ -4,11 +4,11 @@ Grott HA Docker is a beta Home Assistant add-on for Growatt/ShineWiFi telemetry.
 
 The latest supported release is `0.1.9-beta`; `0.1.10-beta` and `0.1.11-beta` remain published prereleases. Current beta line: `0.1.12-beta`, containing the external-layout packaging correction. On 2026-07-18, the owner explicitly waived the remaining observation window after the exact local candidate passed restart, two-device state publication, retained `[32, 32]` discovery, and zero-error checks; every other publication gate remains mandatory. Its [human-written release notes](../../docs/releases/v0.1.12-beta.md) explain the problem, fix, reason, evidence, and user benefit. When the matching GitHub prerelease exists, this add-on uses `ghcr.io/herbertmt978/grott-ha-docker:0.1.12-beta`; Home Assistant selects the image tag matching the add-on version instead of building on the HA box.
 
-This release is beta software. It is being tested with two real ShineWiFi/MOD inverters. SPH, MIN, TL3, T060120, and other unavailable families are fixture/container tested, not real-hardware tested, and may still need new sanitized fixtures before every sensor is correct.
+This release is beta software. The current beta line has been tested with two real ShineWiFi/MOD inverters. SPH, MIN, TL3, T060120, and other unavailable families are fixture/container tested, not real-hardware tested, and may still need new sanitized fixtures before every sensor is correct.
 
 | Version domain | Version | Meaning |
 | --- | --- | --- |
-| Fork/add-on release | `0.1.12-beta` | The unpublished candidate add-on metadata and matching local test image. |
+| Fork/add-on release | `0.1.12-beta` | The current beta metadata and matching release image, supported only when its GitHub prerelease exists. |
 | Bundled Grott core (upstream startup version) | `2.8.3` | The version printed at startup by the inherited Grott entry point, with this fork's fixes applied on top. |
 | Bundled Home Assistant extension | `0.0.8` | The in-repository MQTT discovery and state extension. |
 

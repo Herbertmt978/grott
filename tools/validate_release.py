@@ -57,6 +57,13 @@ EXPECTED_GROTT_STARTUP_VERSION = "2.8.3"
 EXPECTED_HA_EXTENSION_VERSION = "0.0.8"
 EXPECTED_RUNTIME_IMAGE = "ghcr.io/herbertmt978/grott"
 EXPECTED_ADDON_IMAGE = "ghcr.io/herbertmt978/grott-ha-docker"
+STALE_WAIVER_LIFECYCLE_PHRASES = (
+    "current candidate is being tested",
+    "must not be published until the vm soak",
+    "intentionally unavailable during local uat",
+    "unpublished candidate add-on metadata",
+    "this release is beta software. it is being tested",
+)
 ROLLBACK_RUNTIME_DIGEST = (
     "sha256:872ca78235cd6552b26f16dcd0de17ce18288fc92ffa82e31435c7651e619b6c"
 )
@@ -357,6 +364,14 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
         errors,
         f"Current beta line: `{addon_version}`" in addon_docs,
         "add-on operator docs must identify the current beta line",
+    )
+    lifecycle_docs = f"{readme}\n{addon_docs}".lower()
+    require(
+        errors,
+        not any(
+            phrase in lifecycle_docs for phrase in STALE_WAIVER_LIFECYCLE_PHRASES
+        ),
+        "recorded UAT waiver must not coexist with stale pre-publication lifecycle wording",
     )
     dockerignore_lines = [line.strip() for line in dockerignore.splitlines()]
     layout_context_lines = [

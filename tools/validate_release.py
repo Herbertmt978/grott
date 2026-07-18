@@ -65,10 +65,10 @@ STALE_WAIVER_LIFECYCLE_PHRASES = (
     "this release is beta software. it is being tested",
 )
 ROLLBACK_RUNTIME_DIGEST = (
-    "sha256:872ca78235cd6552b26f16dcd0de17ce18288fc92ffa82e31435c7651e619b6c"
+    "sha256:066d806774a147bc4c448761d026eb831cdcfa29bc32ef3a1c361a36a2ea361a"
 )
 ROLLBACK_ADDON_DIGEST = (
-    "sha256:4446cbcfe83c00e8c667101067fc0643afded0b6338f1d6c76ba6af113c13831"
+    "sha256:410f2b2e4dfe810aa1d9d8b8591eaae0852ae9f61486d78f663cd6a95c2ab6f1"
 )
 PUBLISH_STEP_SEQUENCE = (
     "Check out validated source SHA",
@@ -100,7 +100,7 @@ PUBLISH_ACTION_PREFIXES = {
 EXPECTED_RELEASE_CONTROL_TOOL_SHA256 = (
     "49c966ce0c7851ebf6c1b1c6027beeeddf1516281b5085968f6dc86856645430"
 )
-CANONICAL_PUBLISH_WORKFLOW_SHA256 = "5cc1c54cc212aaaa44caa7a57f61556e774bbbbd7176e1de268e97667b0c86e4"
+CANONICAL_PUBLISH_WORKFLOW_SHA256 = "ffe2720b3da9a38868e46f6af733fa7b45e020973eed3a80cbe9fb34bb426699"
 PINNED_ACTION_RE = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
 INPUT_TAG_EXPRESSION_RE = re.compile(r"\$\{\{\s*inputs\.tag\s*}}")
 TAG_RE = re.compile(
@@ -286,6 +286,8 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
             "safe literal",
             "non-root",
             "exact-source annotated tags",
+            "stable promotion",
+            "runtime and layout behavior",
             "upstream redistribution permission has been obtained",
             "does not authorize commercial use or reuse unless johan meijer",
             "financial reward or appreciation is directed to him",
@@ -349,21 +351,20 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
 
     require(
         errors,
-        f"current beta line is `v{addon_version}`" in readme
+        f"current stable release line is `v{addon_version}`" in readme
         and f"{EXPECTED_RUNTIME_IMAGE}:{addon_version}" in readme
-        and "latest supported release is `v0.1.9-beta`" in readme
-        and "`v0.1.10-beta` and `v0.1.11-beta` remain published prereleases"
-        in readme
+        and f"`v{addon_version}` is the repository Latest release" in readme
+        and "`v0.1.12-beta` remains an immutable historical prerelease" in readme
         and "owner explicitly waived the remaining observation window" in readme
         and "Releases page is the supported-availability authority" in readme
         and "does not prove that GHCR tags are absent" in readme
-        and "pre-publication examples only" in readme,
+        and "supported only when its matching release entry exists" in readme,
         "README current release and install image must match the release candidate",
     )
     require(
         errors,
-        f"Current beta line: `{addon_version}`" in addon_docs,
-        "add-on operator docs must identify the current beta line",
+        f"Current stable release line: `{addon_version}`" in addon_docs,
+        "add-on operator docs must identify the current stable release line",
     )
     lifecycle_docs = f"{readme}\n{addon_docs}".lower()
     require(
@@ -469,7 +470,7 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
     require(
         errors,
         f"## {addon_version} - prepared {EXPECTED_RELEASE_PREPARED_DATE}" in changelog
-        and "preparation date, not a claim that the beta has been published" in changelog,
+        and "preparation date does not by itself claim publication" in changelog,
         "changelog must identify the prepared candidate without claiming publication",
     )
 
@@ -525,14 +526,14 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
     )
     require(
         errors,
-        "0.1.11-beta" in readme
-        and "0.1.11-beta" in addon_docs
-        and "0.1.11-beta" in releasing
+        "0.1.12-beta" in readme
+        and "0.1.12-beta" in addon_docs
+        and "0.1.12-beta" in releasing
         and ROLLBACK_RUNTIME_DIGEST in readme
         and ROLLBACK_RUNTIME_DIGEST in releasing
         and ROLLBACK_ADDON_DIGEST in addon_docs
         and ROLLBACK_ADDON_DIGEST in releasing,
-        "rollback docs must use the independently verified 0.1.11-beta manifests",
+        "rollback docs must use the independently verified 0.1.12-beta manifests",
     )
     require(
         errors,
@@ -1015,8 +1016,10 @@ def validate_publish_workflow(
     concurrency = workflow.get("concurrency")
     require(
         errors,
-        isinstance(concurrency, dict) and "inputs.tag" in str(concurrency.get("group", "")) and concurrency.get("cancel-in-progress") is False,
-        f"{path}: concurrency must serialize each requested tag with cancel-in-progress: false",
+        isinstance(concurrency, dict)
+        and concurrency.get("group") == "publish-ghcr-release"
+        and concurrency.get("cancel-in-progress") is False,
+        f"{path}: concurrency must serialize all release publications with cancel-in-progress: false",
     )
 
     jobs = workflow.get("jobs")
@@ -1099,16 +1102,18 @@ def validate_publish_workflow(
     expected_validate_outputs = {
         "tag": "${{ steps.release_input.outputs.tag }}",
         "version": "${{ steps.release_input.outputs.version }}",
+        "is_prerelease": "${{ steps.release_input.outputs.is_prerelease }}",
         "source_sha": "${{ steps.source.outputs.sha }}",
     }
     require(
         errors,
         validate_job.get("outputs") == expected_validate_outputs,
-        f"{path}: validate job must export validated tag, version, and source SHA",
+        f"{path}: validate job must export validated prerelease mode with the tag, version, and source SHA",
     )
     expected_publish_outputs = {
         "tag": "${{ needs.validate.outputs.tag }}",
         "version": "${{ needs.validate.outputs.version }}",
+        "is_prerelease": "${{ needs.validate.outputs.is_prerelease }}",
         "source_sha": "${{ needs.validate.outputs.source_sha }}",
         "runtime_digest": "${{ steps.runtime_build.outputs.digest }}",
         "addon_digest": "${{ steps.addon_build.outputs.digest }}",
@@ -1122,6 +1127,23 @@ def validate_publish_workflow(
     validate_steps = job_steps(validate_job)
     publish_steps = job_steps(publish_job)
     prerelease_steps = job_steps(prerelease_job)
+    release_input_step = find_step(validate_steps, "Validate requested release tag")
+    release_input_run = (
+        str(release_input_step.get("run", "")) if release_input_step else ""
+    )
+    release_mode_tokens = (
+        "is_prerelease=false",
+        'if [[ "${REQUESTED_TAG}" == *-* ]]',
+        "is_prerelease=true",
+        "printf 'is_prerelease=%s\\n' \"${is_prerelease}\"",
+    )
+    require(
+        errors,
+        release_input_step is not None
+        and release_input_step.get("id") == "release_input"
+        and all(token in release_input_run for token in release_mode_tokens),
+        f"{path}: validated prerelease mode must be derived from the validated tag and exported by the release-input step",
+    )
     dispatch_step = find_step(validate_steps, "Preserve protected workflow dispatch SHA")
     source_step = find_step(validate_steps, "Verify checked-out tag and source commit")
     validate_checkout_indexes = [
@@ -1274,8 +1296,8 @@ def validate_publish_workflow(
         errors,
         tuple(str(step.get("name", "")) for step in prerelease_steps)
         == (
-            "Revalidate remote tag before prerelease",
-            "Verify or create idempotent GitHub prerelease",
+            "Revalidate remote tag before release",
+            "Verify or create idempotent GitHub release",
         ),
         f"{path}: prerelease job must use only remote revalidation and release creation steps",
     )
@@ -1513,7 +1535,7 @@ def validate_publish_workflow(
         f"{path}: remote tag revalidation must run immediately before final promotion",
     )
 
-    prerelease_revalidation = find_step(prerelease_steps, "Revalidate remote tag before prerelease")
+    prerelease_revalidation = find_step(prerelease_steps, "Revalidate remote tag before release")
     validate_remote_revalidation(
         path,
         prerelease_revalidation,
@@ -1521,21 +1543,47 @@ def validate_publish_workflow(
         "prerelease",
         errors,
     )
-    create_step = find_step(prerelease_steps, "Verify or create idempotent GitHub prerelease")
+    create_step = find_step(prerelease_steps, "Verify or create idempotent GitHub release")
     create_run = str(create_step.get("run", "")) if create_step else ""
     create_env = create_step.get("env") if create_step and isinstance(create_step.get("env"), dict) else {}
-    prerelease_tokens = (
+    release_tokens = (
         "gh release create",
         '--target "${SOURCE_SHA}"',
         "--verify-tag",
-        "--prerelease",
+        '"${release_state_args[@]}"',
     )
+    release_channel_block = """case "${EXPECTED_PRERELEASE}" in
+  true)
+    expected_prerelease=true
+    release_state_args=(--prerelease --latest=false)
+    ;;
+  false)
+    expected_prerelease=false
+    release_state_args=(--latest)
+    ;;
+  *)
+    echo "ERROR: validated prerelease state must be exactly true or false" >&2
+    exit 1
+    ;;
+esac"""
     require(
         errors,
         create_step is not None
-        and all(token in create_run for token in prerelease_tokens)
+        and all(token in create_run for token in release_tokens)
         and create_env.get("SOURCE_SHA") == "${{ needs.publish.outputs.source_sha }}",
-        f"{path}: prerelease must target the validated source SHA with --verify-tag and --prerelease",
+        f"{path}: GitHub release must target the validated source SHA with --verify-tag and the validated release-channel arguments",
+    )
+    require(
+        errors,
+        release_channel_block in create_run,
+        f"{path}: GitHub release must derive stable and prerelease channels from trusted validated state, mark stable releases Latest, and force prereleases non-Latest",
+    )
+    require(
+        errors,
+        create_env.get("EXPECTED_PRERELEASE")
+        == "${{ needs.publish.outputs.is_prerelease }}"
+        and 'if [[ "${RELEASE_TAG}" == *-* ]]' not in create_run,
+        f"{path}: GitHub release must consume only the trusted validated prerelease mode without re-deriving it from the tag",
     )
     expected_prerelease_digest_env = {
         "RUNTIME_IMAGE": "${{ env.RUNTIME_IMAGE }}",
@@ -1654,15 +1702,39 @@ def validate_publish_workflow(
     require(
         errors,
         '--arg tag "${RELEASE_TAG}"' in create_run
-        and ".tag_name == $tag" in create_run
+        and create_run.count(".tag_name == $tag") >= 2
         and '--arg sha "${SOURCE_SHA}"' not in create_run
         and "target_commitish" not in create_run,
         f"{path}: existing prerelease verification must require the matching release tag without relying on target_commitish",
     )
     require(
         errors,
-        ".draft == false and .prerelease == true" in create_run,
-        f"{path}: existing release verification must require non-draft prerelease state",
+        '--argjson expected_prerelease "${expected_prerelease}"' in create_run
+        and ".draft == false and .prerelease == $expected_prerelease" in create_run,
+        f"{path}: existing release verification must require the exact non-draft stable or prerelease state",
+    )
+    release_schema_tokens = (
+        "validate_release_schema() {",
+        'has("id")',
+        '.id | type == "number" and . > 0',
+        'has("immutable")',
+        '.immutable | type == "boolean"',
+    )
+    require(
+        errors,
+        all(token in create_run for token in release_schema_tokens),
+        f"{path}: release lookups must require a typed release ID and immutable state",
+    )
+    immutable_release_block = re.search(
+        r"\(\.draft == false and \.prerelease == \$expected_prerelease\) and\s+"
+        r"\(\.immutable == true\) and\s+"
+        r'\(\(\.body // ""\) == \$expected_body\)',
+        create_run,
+    )
+    require(
+        errors,
+        immutable_release_block is not None,
+        f"{path}: exact release verification must require an immutable published release",
     )
     require(
         errors,
@@ -1681,7 +1753,10 @@ def validate_publish_workflow(
     )
     require(
         errors,
-        all(token in create_run for token in lookup_failure_tokens),
+        all(token in create_run for token in lookup_failure_tokens)
+        and create_run.count('return "${LOOKUP_ABSENT}"') == 2
+        and create_run.count('return "${LOOKUP_FAILED}"') == 2
+        and create_run.count('return "${LOOKUP_AMBIGUOUS}"') == 2,
         f"{path}: prerelease must distinguish explicit absence from lookup failure or ambiguity",
     )
     require(
@@ -1690,6 +1765,12 @@ def validate_publish_workflow(
         and 'verify_final_release "${create_status}"' in create_run
         and 'verify_release "post-create release" "${final_release}"' in create_run,
         f"{path}: prerelease must post-verify the final prerelease after every create or retry path",
+    )
+    require(
+        errors,
+        'verified_release_id="$(jq -er' in create_run
+        and '.id | select(type == "number" and . > 0)' in create_run,
+        f"{path}: post-create verification must extract the typed positive verified release ID",
     )
     retry_tokens = (
         "create_status=$?",
@@ -1703,10 +1784,46 @@ def validate_publish_workflow(
         all(token in create_run for token in retry_tokens),
         f"{path}: prerelease must preserve idempotent retry and race recovery while failing on mismatches",
     )
-    create_index = step_index(prerelease_steps, "Verify or create idempotent GitHub prerelease")
+    latest_tokens = (
+        "verify_latest_release() {",
+        "lookup_latest_release() {",
+        'if [[ "${expected_prerelease}" == "true" ]]',
+        'gh api "repos/${GITHUB_REPOSITORY}/releases/latest"',
+        ".draft == false and .prerelease == false",
+        "stable release is not the repository Latest release",
+        'verify_final_release "${create_status}"\nverify_latest_release',
+    )
     require(
         errors,
-        create_index is not None and create_index > 0 and prerelease_steps[create_index - 1].get("name") == "Revalidate remote tag before prerelease",
+        all(token in create_run for token in latest_tokens),
+        f"{path}: GitHub release must verify stable releases as Latest after exact post-create verification",
+    )
+    stable_latest_block = re.search(
+        r"\(\.id == \$expected_id\) and\s+"
+        r"\(\.tag_name == \$tag\) and\s+"
+        r"\(\.draft == false and \.prerelease == false\) and\s+"
+        r"\(\.immutable == true\)",
+        create_run,
+    )
+    require(
+        errors,
+        stable_latest_block is not None,
+        f"{path}: stable Latest verification must require the exact stable release ID as Latest",
+    )
+    prerelease_latest_block = """--argjson expected_id "${verified_release_id}" \\
+      '(.id != $expected_id) and
+       (.draft == false and .prerelease == false)'"""
+    require(
+        errors,
+        prerelease_latest_block in create_run
+        and "latest release unexpectedly resolves to the prerelease" in create_run
+        and '[[ "${latest_status}" -eq "${LOOKUP_ABSENT}" ]]' in create_run,
+        f"{path}: Latest verification must prove prereleases are not Latest while accepting only an explicit missing Latest release",
+    )
+    create_index = step_index(prerelease_steps, "Verify or create idempotent GitHub release")
+    require(
+        errors,
+        create_index is not None and create_index > 0 and prerelease_steps[create_index - 1].get("name") == "Revalidate remote tag before release",
         f"{path}: remote tag revalidation must run immediately before prerelease creation",
     )
 

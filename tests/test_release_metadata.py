@@ -13,13 +13,13 @@ from tools import validate_release
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE_PREPARED_DATE = "2026-07-18"
-CURRENT_RELEASE_VERSION = "0.1.12-beta"
+CURRENT_RELEASE_VERSION = "0.1.12"
 CURRENT_RELEASE_TAG = f"v{CURRENT_RELEASE_VERSION}"
 ROLLBACK_RUNTIME_DIGEST = (
-    "sha256:872ca78235cd6552b26f16dcd0de17ce18288fc92ffa82e31435c7651e619b6c"
+    "sha256:066d806774a147bc4c448761d026eb831cdcfa29bc32ef3a1c361a36a2ea361a"
 )
 ROLLBACK_ADDON_DIGEST = (
-    "sha256:4446cbcfe83c00e8c667101067fc0643afded0b6338f1d6c76ba6af113c13831"
+    "sha256:410f2b2e4dfe810aa1d9d8b8591eaae0852ae9f61486d78f663cd6a95c2ab6f1"
 )
 
 
@@ -51,7 +51,7 @@ def copy_release_metadata(destination: Path) -> None:
     )
 
 
-def test_release_preparation_targets_v012_beta() -> None:
+def test_release_preparation_targets_v012_stable() -> None:
     assert canonical_release_version() == CURRENT_RELEASE_VERSION
     assert curated_release_notes_path().name == f"{CURRENT_RELEASE_TAG}.md"
 
@@ -72,16 +72,16 @@ def test_current_release_metadata_is_aligned() -> None:
     assert compose["services"]["grott"]["image"] == (
         f"ghcr.io/herbertmt978/grott:{release_version}"
     )
-    assert f"current beta line is `v{release_version}`" in readme
+    assert f"current stable release line is `v{release_version}`" in readme
     assert f"docs/releases/v{release_version}.md" in readme
     assert f"ghcr.io/herbertmt978/grott:{release_version}" in readme
-    assert f"Current beta line: `{release_version}`" in addon_docs
-    assert "latest supported release is `v0.1.9-beta`" in readme
-    assert "`v0.1.10-beta` and `v0.1.11-beta` remain published prereleases" in readme
+    assert f"Current stable release line: `{release_version}`" in addon_docs
+    assert "`v0.1.12` is the repository Latest release" in readme
+    assert "`v0.1.12-beta` remains an immutable historical prerelease" in readme
     assert "owner explicitly waived the remaining observation window" in readme
     assert "Releases page is the supported-availability authority" in readme
     assert "does not prove that GHCR tags are absent" in readme
-    assert "pre-publication examples only" in readme
+    assert "supported only when its matching release entry exists" in readme
     lifecycle_docs = f"{readme}\n{addon_docs}".lower()
     assert not any(
         phrase in lifecycle_docs
@@ -123,7 +123,7 @@ def test_changelog_has_empty_unreleased_then_prepared_candidate() -> None:
     assert "reviewed three-file allowlist" in release_section
     assert "built-in layouts" in release_section
     assert "fixture" in release_section.lower()
-    assert "not a claim that the beta has been published" in release_section
+    assert "preparation date does not by itself claim publication" in release_section
 
 
 def test_support_docs_require_packet_identifier_pseudonymisation() -> None:
@@ -204,6 +204,8 @@ def test_v012_release_notes_cover_layout_packaging_and_safe_upgrade_contract() -
     ):
         assert required in normalized
     assert "has not been published" not in normalized
+    assert "stable promotion" in normalized
+    assert "runtime and layout behavior" in normalized
 
 
 def test_entity_profile_docs_distinguish_generic_and_mod_all_counts() -> None:
@@ -310,7 +312,7 @@ def test_operator_docs_cover_runtime_filesystem_constraints_and_rollback() -> No
             text,
         )
     for text in (readme, addon_docs, releasing):
-        assert "0.1.11-beta" in text
+        assert "0.1.12-beta" in text
     assert ROLLBACK_RUNTIME_DIGEST in readme
     assert ROLLBACK_ADDON_DIGEST in addon_docs
     assert ROLLBACK_RUNTIME_DIGEST in releasing
@@ -447,7 +449,7 @@ def test_ha_validator_accepts_any_semverish_candidate_version(
     config = yaml.safe_load(
         (ROOT / "addons/grott/config.yaml").read_text(encoding="utf-8")
     )
-    config["version"] = "9.9.9-beta"
+    config["version"] = "9.9.9"
     config["stage"] = "experimental"
     monkeypatch.setattr(validate_ha_addon_repo, "load_yaml", lambda _path: config)
     errors: list[str] = []
@@ -520,7 +522,7 @@ def test_release_validator_derives_current_version_from_addon_config(
 ) -> None:
     copy_release_metadata(tmp_path)
     old_version = canonical_release_version(tmp_path)
-    new_version = "9.8.7-beta"
+    new_version = "9.8.7"
     config_path = tmp_path / "addons/grott/config.yaml"
     config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     config["version"] = new_version
@@ -528,7 +530,9 @@ def test_release_validator_derives_current_version_from_addon_config(
     old_notes_path = tmp_path / "docs" / "releases" / f"v{old_version}.md"
     new_notes_path = tmp_path / "docs" / "releases" / f"v{new_version}.md"
     new_notes_path.write_text(
-        old_notes_path.read_text(encoding="utf-8").replace(old_version, new_version),
+        old_notes_path.read_text(encoding="utf-8")
+        .replace(old_version, new_version)
+        .replace(f"{new_version}-beta", "0.1.12-beta"),
         encoding="utf-8",
         newline="\n",
     )
@@ -542,7 +546,9 @@ def test_release_validator_derives_current_version_from_addon_config(
     ):
         path = tmp_path / relative_path
         path.write_text(
-            path.read_text(encoding="utf-8").replace(old_version, new_version),
+            path.read_text(encoding="utf-8")
+            .replace(old_version, new_version)
+            .replace(f"{new_version}-beta", "0.1.12-beta"),
             encoding="utf-8",
         )
 

@@ -34,16 +34,34 @@ EXPECTED_BUILD_IDS = {
     "docker/dockerfile": "runtime_build",
     "addons/grott/Dockerfile": "addon_build",
 }
-EXPECTED_RELEASE_PREPARED_DATE = "2026-07-14"
+REVIEWED_LAYOUT_COPY = (
+    'COPY ["examples/Record Layout/T06NNNNXMOD.json", '
+    '"examples/Record Layout/t060103xmax3.json", '
+    '"examples/Record Layout/T06221b.json", "/app/"]'
+)
+REVIEWED_LAYOUT_CONTEXT_LINES = (
+    "/examples/Record Layout/*",
+    "!/examples/Record Layout/T06NNNNXMOD.json",
+    "!/examples/Record Layout/t060103xmax3.json",
+    "!/examples/Record Layout/T06221b.json",
+)
+REVIEWED_DOCKERIGNORE_NEGATIONS = (
+    "!/examples/Record Layout/T06NNNNXMOD.json",
+    "!/examples/Record Layout/t060103xmax3.json",
+    "!/examples/Record Layout/T06221b.json",
+    "!/examples/grott.ini",
+    "!/.env.example",
+)
+EXPECTED_RELEASE_PREPARED_DATE = "2026-07-18"
 EXPECTED_GROTT_STARTUP_VERSION = "2.8.3"
 EXPECTED_HA_EXTENSION_VERSION = "0.0.8"
 EXPECTED_RUNTIME_IMAGE = "ghcr.io/herbertmt978/grott"
 EXPECTED_ADDON_IMAGE = "ghcr.io/herbertmt978/grott-ha-docker"
 ROLLBACK_RUNTIME_DIGEST = (
-    "sha256:e9314693651e0cce82c603b53f88c66ae4757d93e09b97a24c56070c845d2351"
+    "sha256:872ca78235cd6552b26f16dcd0de17ce18288fc92ffa82e31435c7651e619b6c"
 )
 ROLLBACK_ADDON_DIGEST = (
-    "sha256:7c55c161195eccd5d93bd22576bee2ea2958f68a380087eb6694d103bcfafbb1"
+    "sha256:4446cbcfe83c00e8c667101067fc0643afded0b6338f1d6c76ba6af113c13831"
 )
 PUBLISH_STEP_SEQUENCE = (
     "Check out validated source SHA",
@@ -247,12 +265,16 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
         curated_lower = curated_notes.lower()
         required_note_tokens = (
             "supported-availability authority",
+            "reviewed three-file allowlist",
+            "sph battery soc",
+            "fixture/container tested",
+            "not real-hardware tested",
             "v0_1_9_standard",
             "omitted option",
             "next live packet",
             "image rollback does not restore",
             "home assistant repairs",
-            "changes carried forward from v0.1.10-beta",
+            "changes carried forward from v0.1.11-beta",
             "tcp frame reassembly",
             "safe literal",
             "non-root",
@@ -300,6 +322,16 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
         "RELEASING.md": read_required_text(root, Path("RELEASING.md"), errors),
         "docs/LEGAL.md": read_required_text(root, Path("docs/LEGAL.md"), errors),
         ".dockerignore": read_required_text(root, Path(".dockerignore"), errors),
+        "docker/dockerfile": read_required_text(
+            root,
+            Path("docker/dockerfile"),
+            errors,
+        ),
+        "addons/grott/Dockerfile": read_required_text(
+            root,
+            Path("addons/grott/Dockerfile"),
+            errors,
+        ),
     }
     readme = texts["README.md"]
     addon_docs = texts["addons/grott/DOCS.md"]
@@ -314,10 +346,12 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
         and f"/releases/tag/v{addon_version}" not in readme
         and f"{EXPECTED_RUNTIME_IMAGE}:{addon_version}" in readme
         and "latest supported release is `v0.1.9-beta`" in readme
-        and "`v0.1.10-beta` remains a prerelease" in readme
+        and "`v0.1.10-beta` and `v0.1.11-beta` remain published prereleases"
+        in readme
+        and "unpublished local UAT candidate" in readme
         and "Releases page is the supported-availability authority" in readme
         and "does not prove that GHCR tags are absent" in readme
-        and "preparation examples only" in readme,
+        and "unpublished-candidate examples only" in readme,
         "README current release and install image must match the release candidate",
     )
     require(
@@ -325,11 +359,46 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
         f"Supported release candidate: `{addon_version}`" in addon_docs,
         "add-on operator docs must identify the supported release candidate",
     )
+    dockerignore_lines = [line.strip() for line in dockerignore.splitlines()]
+    layout_context_lines = [
+        line.strip()
+        for line in dockerignore_lines
+        if line.strip().startswith("/examples/Record Layout/")
+        or line.strip().startswith("!/examples/Record Layout/")
+    ]
     require(
         errors,
-        "/examples/Record Layout/t06NNNNX.json" in dockerignore,
-        "Docker build context must exclude the conflicting generic layout override",
+        layout_context_lines == list(REVIEWED_LAYOUT_CONTEXT_LINES),
+        "Docker build context must use the exact reviewed layout allowlist",
     )
+    require(
+        errors,
+        [line for line in dockerignore_lines if line.startswith("!")]
+        == list(REVIEWED_DOCKERIGNORE_NEGATIONS),
+        "Docker build context negations must match the reviewed layout allowlist",
+    )
+    for dockerfile_path in ("docker/dockerfile", "addons/grott/Dockerfile"):
+        dockerfile_lines = [
+            line.strip() for line in texts[dockerfile_path].splitlines()
+        ]
+        require(
+            errors,
+            not any(
+                re.match(r"(?i)^ADD(?:\s|\[)", line)
+                for line in dockerfile_lines
+            ),
+            f"{dockerfile_path}: Dockerfile ADD instructions are forbidden",
+        )
+        layout_reference_lines = [
+            line.strip()
+            for line in dockerfile_lines
+            if re.search(r"record(?:\s|\\)+layout", line, re.IGNORECASE)
+        ]
+        require(
+            errors,
+            layout_reference_lines == [REVIEWED_LAYOUT_COPY],
+            f"{dockerfile_path} must use the exact reviewed external layout allowlist",
+        )
 
     version_tokens = (
         ("Fork/add-on release", addon_version),
@@ -432,7 +501,7 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
 
     rollback_docs = readme + "\n" + addon_docs + "\n" + releasing
     unsupported_ha_reinstall = re.compile(
-        r"\breinstall(?:ing)?(?:\s+the)?\s+add-on(?:\s+version)?\s+`?0\.1\.9-beta`?",
+        r"\breinstall(?:ing)?(?:\s+the)?\s+add-on(?:\s+version)?\s+`?\d+\.\d+\.\d+-beta`?",
         re.IGNORECASE,
     )
     require(
@@ -442,14 +511,14 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
     )
     require(
         errors,
-        "0.1.9-beta" in readme
-        and "0.1.9-beta" in addon_docs
-        and "0.1.9-beta" in releasing
+        "0.1.11-beta" in readme
+        and "0.1.11-beta" in addon_docs
+        and "0.1.11-beta" in releasing
         and ROLLBACK_RUNTIME_DIGEST in readme
         and ROLLBACK_RUNTIME_DIGEST in releasing
         and ROLLBACK_ADDON_DIGEST in addon_docs
         and ROLLBACK_ADDON_DIGEST in releasing,
-        "rollback docs must use the independently verified 0.1.9-beta manifests",
+        "rollback docs must use the independently verified 0.1.11-beta manifests",
     )
     require(
         errors,

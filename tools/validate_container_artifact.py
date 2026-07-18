@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from importlib import import_module, metadata
 import json
 import os
@@ -10,6 +11,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from tempfile import TemporaryDirectory
 from typing import Any, Iterable
 
 from packaging.requirements import Requirement
@@ -19,6 +21,22 @@ from packaging.utils import canonicalize_name
 APP_DIR = Path("/app")
 VENV_SITE_PACKAGES = Path("/opt/venv/lib/python3.11/site-packages")
 EXPECTED_WHEEL_VERSION = "0.47.0"
+APPROVED_EXTERNAL_LAYOUTS = {
+    "T06NNNNXMOD.json": {"T06NNNNXMOD"},
+    "t060103xmax3.json": {"T060103XMAX"},
+    "T06221b.json": {"T06221b"},
+}
+APPROVED_EXTERNAL_LAYOUT_SHA256 = {
+    "T06NNNNXMOD.json": (
+        "278a9eec3c8f008eee83daba5d3974044e276a894521314afa160b3d07372378"
+    ),
+    "t060103xmax3.json": (
+        "9d96ecda61e5cbdafc4c6937af8909dbca224ad31ceb0cf62ea1d443d37ea10e"
+    ),
+    "T06221b.json": (
+        "8f69cc4a294b1917a6606c8157aaec27d044a7783a7ee0dcc2970d47a391a569"
+    ),
+}
 EXPECTED_GENERIC_LAYOUT = {
     "datalogserial": {"value": 16, "length": 10, "type": "text", "incl": "yes"},
     "pvserial": {"value": 76, "length": 10, "type": "text"},
@@ -160,8 +178,111 @@ def external_layout_payloads() -> list[Path]:
         path
         for path in APP_DIR.iterdir()
         if path.is_file()
-        and path.suffix == ".json"
+        and ".json" in path.name
         and path.name[:1] in {"T", "t"}
+    )
+
+
+def read_external_layout(path: Path) -> dict[str, Any]:
+    """Read one loader-visible external layout mapping."""
+    with path.open(encoding="utf-8") as handle:
+        payload = json.load(handle)
+    require(isinstance(payload, dict), f"external layout must be a mapping: {path.name}")
+    return payload
+
+
+def canonical_layout_sha256(payload: dict[str, Any]) -> str:
+    """Hash parsed JSON so checkout line endings and formatting do not matter."""
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def external_layout_conflicts(
+    builtin_recorddict: dict[str, Any],
+    layout_payloads: Iterable[Path],
+) -> dict[str, list[str]]:
+    """Return built-in overrides and duplicate external record identifiers."""
+    owners: dict[str, str] = {}
+    conflicts: dict[str, set[str]] = {}
+    for path in sorted(layout_payloads, key=lambda item: item.name):
+        for layout_key in read_external_layout(path):
+            if layout_key in builtin_recorddict:
+                conflicts.setdefault(layout_key, set()).add(path.name)
+            previous_owner = owners.get(layout_key)
+            if previous_owner is not None:
+                conflicts.setdefault(layout_key, set()).update(
+                    (previous_owner, path.name)
+                )
+            else:
+                owners[layout_key] = path.name
+    return {
+        layout_key: sorted(filenames)
+        for layout_key, filenames in sorted(conflicts.items())
+    }
+
+
+def recorddict_for_directory(grottconf: Any, directory: Path) -> dict[str, Any]:
+    """Load Grott's record dictionary using its production directory rules."""
+    conf = grottconf.Conf.__new__(grottconf.Conf)
+    conf.verbose = False
+    previous_cwd = Path.cwd()
+    try:
+        os.chdir(directory)
+        conf.set_reclayouts()
+    finally:
+        os.chdir(previous_cwd)
+    return conf.recorddict
+
+
+def assert_external_layout_contract(
+    builtin_recorddict: dict[str, Any],
+    loaded_recorddict: dict[str, Any],
+    layout_payloads: Iterable[Path],
+) -> None:
+    """Require the exact reviewed external layout overlay in final images."""
+    payloads = list(layout_payloads)
+    actual_names = {path.name for path in payloads}
+    expected_names = set(APPROVED_EXTERNAL_LAYOUTS)
+    require(
+        actual_names == expected_names,
+        "external layout payload set does not match the reviewed allowlist: "
+        f"expected {sorted(expected_names)}, found {sorted(actual_names)}",
+    )
+
+    definitions: dict[str, dict[str, Any]] = {}
+    for path in payloads:
+        payload = read_external_layout(path)
+        actual_keys = set(payload)
+        expected_keys = APPROVED_EXTERNAL_LAYOUTS[path.name]
+        require(
+            actual_keys == expected_keys,
+            f"external layout keys for {path.name} must be "
+            f"{sorted(expected_keys)}, found {sorted(actual_keys)}",
+        )
+        require(
+            canonical_layout_sha256(payload)
+            == APPROVED_EXTERNAL_LAYOUT_SHA256[path.name],
+            f"external layout {path.name} does not match its reviewed semantic digest",
+        )
+        definitions[path.name] = payload
+
+    conflicts = external_layout_conflicts(builtin_recorddict, payloads)
+    require(
+        not conflicts,
+        f"external layout keys conflict with built-ins or each other: {conflicts}",
+    )
+
+    expected_recorddict = dict(builtin_recorddict)
+    for path in payloads:
+        expected_recorddict.update(definitions[path.name])
+    require(
+        loaded_recorddict == expected_recorddict,
+        "production layout loading changed a built-in or approved external layout",
     )
 
 
@@ -281,26 +402,19 @@ def main() -> int:
         f"required runtime payload is missing: {missing_payloads}",
     )
     layout_payloads = external_layout_payloads()
-    layout_names = {path.name for path in layout_payloads}
-    required_layouts = {"T06NNNNXMOD.json", "t060103xmax3.json", "T06221b.json"}
-    require(
-        required_layouts.issubset(layout_names),
-        f"required external layout payload is missing: {sorted(required_layouts - layout_names)}",
-    )
-    for layout_path in layout_payloads:
-        with layout_path.open(encoding="utf-8") as handle:
-            json.load(handle)
-
     grottconf = import_module("grottconf")
-    conf = grottconf.Conf.__new__(grottconf.Conf)
-    conf.verbose = False
-    previous_cwd = Path.cwd()
-    try:
-        os.chdir(APP_DIR)
-        conf.set_reclayouts()
-    finally:
-        os.chdir(previous_cwd)
-    assert_generic_layout_contract(conf.recorddict)
+    with TemporaryDirectory() as temporary_directory:
+        builtin_recorddict = recorddict_for_directory(
+            grottconf,
+            Path(temporary_directory),
+        )
+    loaded_recorddict = recorddict_for_directory(grottconf, APP_DIR)
+    assert_external_layout_contract(
+        builtin_recorddict,
+        loaded_recorddict,
+        layout_payloads,
+    )
+    assert_generic_layout_contract(loaded_recorddict)
 
     assert_wheel_contract()
     distributions = list(metadata.distributions(path=[str(VENV_SITE_PACKAGES)]))

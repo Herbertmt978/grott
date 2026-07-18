@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -68,6 +69,22 @@ def test_wheel_contract_requires_exact_library_and_libscrc_declaration(monkeypat
 
 
 def test_artifact_policy_covers_complete_modules_payload_and_removed_tooling():
+    assert validate_container_artifact.APPROVED_EXTERNAL_LAYOUTS == {
+        "T06NNNNXMOD.json": {"T06NNNNXMOD"},
+        "t060103xmax3.json": {"T060103XMAX"},
+        "T06221b.json": {"T06221b"},
+    }
+    assert validate_container_artifact.APPROVED_EXTERNAL_LAYOUT_SHA256 == {
+        "T06NNNNXMOD.json": (
+            "278a9eec3c8f008eee83daba5d3974044e276a894521314afa160b3d07372378"
+        ),
+        "t060103xmax3.json": (
+            "9d96ecda61e5cbdafc4c6937af8909dbca224ad31ceb0cf62ea1d443d37ea10e"
+        ),
+        "T06221b.json": (
+            "8f69cc4a294b1917a6606c8157aaec27d044a7783a7ee0dcc2970d47a391a569"
+        ),
+    }
     assert set(validate_container_artifact.REQUIRED_MODULES) == {
         "grottconf",
         "grottdata",
@@ -134,6 +151,10 @@ def test_artifact_validator_parses_every_external_layout_payload(tmp_path, monke
     for name in ("T06NNNNXMOD.json", "t060103xmax3.json", "T06221b.json"):
         (tmp_path / name).write_text('{"layout": {}}', encoding="utf-8")
     (tmp_path / "t_bad.json").write_text('{"layout": }', encoding="utf-8")
+    (tmp_path / "t_disguised.json.backup").write_text(
+        '{"layout": {}}',
+        encoding="utf-8",
+    )
     (tmp_path / "not-a-layout.json").write_text("not json", encoding="utf-8")
 
     payloads = validate_container_artifact.external_layout_payloads()
@@ -143,7 +164,55 @@ def test_artifact_validator_parses_every_external_layout_payload(tmp_path, monke
         "T06NNNNXMOD.json",
         "t060103xmax3.json",
         "t_bad.json",
+        "t_disguised.json.backup",
     }
+
+
+def test_external_layout_conflicts_report_builtin_and_duplicate_keys(tmp_path):
+    first = tmp_path / "T_first.json"
+    first.write_text(
+        json.dumps({"T_BUILTIN": {}, "T_DUPLICATE": {}}),
+        encoding="utf-8",
+    )
+    second = tmp_path / "t_second.json"
+    second.write_text(
+        json.dumps({"T_DUPLICATE": {}, "T_SAFE": {}}),
+        encoding="utf-8",
+    )
+
+    assert validate_container_artifact.external_layout_conflicts(
+        {"T_BUILTIN": {}},
+        [second, first],
+    ) == {
+        "T_BUILTIN": ["T_first.json"],
+        "T_DUPLICATE": ["T_first.json", "t_second.json"],
+    }
+
+
+def test_external_layout_contract_rejects_changed_approved_semantics(tmp_path):
+    source_dir = Path(__file__).resolve().parents[1] / "examples" / "Record Layout"
+    layout_paths = []
+    loaded_recorddict = {}
+    for name in validate_container_artifact.APPROVED_EXTERNAL_LAYOUTS:
+        payload = json.loads((source_dir / name).read_text(encoding="utf-8"))
+        if name == "T06NNNNXMOD.json":
+            layout = payload["T06NNNNXMOD"]
+            field = next(value for value in layout.values() if "divide" in value)
+            field["divide"] += 1
+        path = tmp_path / name
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        layout_paths.append(path)
+        loaded_recorddict.update(payload)
+
+    with pytest.raises(
+        validate_container_artifact.ArtifactValidationError,
+        match="reviewed semantic digest",
+    ):
+        validate_container_artifact.assert_external_layout_contract(
+            {},
+            loaded_recorddict,
+            layout_paths,
+        )
 
 
 def test_artifact_validator_has_no_optimization_disableable_assertions():

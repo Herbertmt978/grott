@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from copy import deepcopy
+import json
 from pathlib import Path
 import re
 
+import pytest
 import yaml
+
+from grottconf import Conf
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +27,16 @@ APPLICATION_MODULES = {
     "grottserver.py",
     "grottsniffer.py",
 }
+PACKAGED_LAYOUT_SOURCES = {
+    "T06NNNNXMOD.json": ROOT / "examples" / "Record Layout" / "T06NNNNXMOD.json",
+    "t060103xmax3.json": ROOT / "examples" / "Record Layout" / "t060103xmax3.json",
+    "T06221b.json": ROOT / "examples" / "Record Layout" / "T06221b.json",
+}
+PACKAGED_LAYOUT_COPY = (
+    'COPY ["examples/Record Layout/T06NNNNXMOD.json", '
+    '"examples/Record Layout/t060103xmax3.json", '
+    '"examples/Record Layout/T06221b.json", "/app/"]'
+)
 
 
 def _text(path: Path) -> str:
@@ -96,7 +111,12 @@ def test_both_images_use_the_same_pinned_multistage_alpine_base_and_hash_lock():
 
 def test_images_build_only_from_reviewed_root_context_and_copy_identical_sources():
     dockerignore = _text(ROOT / ".dockerignore")
-    assert "/examples/Record Layout/t06NNNNX.json" in dockerignore
+    assert "/examples/Record Layout/*" in dockerignore
+    assert {
+        "!/examples/Record Layout/T06NNNNXMOD.json",
+        "!/examples/Record Layout/t060103xmax3.json",
+        "!/examples/Record Layout/T06221b.json",
+    }.issubset(set(dockerignore.splitlines()))
     for path in DOCKERFILES:
         dockerfile = _text(path)
         assert "git clone" not in dockerfile
@@ -107,9 +127,77 @@ def test_images_build_only_from_reviewed_root_context_and_copy_identical_sources
         assert "COPY grottext /app/grottext" in dockerfile
         assert "COPY examples/grott.ini /app/grott.ini" in dockerfile
         assert 'COPY ["examples/Home Assistent/grott_ha.py", "/app/grott_ha.py"]' in dockerfile
-        assert 'COPY ["examples/Record Layout/", "/app/"]' in dockerfile
+        assert 'COPY ["examples/Record Layout/", "/app/"]' not in dockerfile
+        assert PACKAGED_LAYOUT_COPY in dockerfile
         assert "COPY tools/container_healthcheck.py /usr/local/bin/container_healthcheck.py" in dockerfile
         assert "COPY tools/validate_container_artifact.py /usr/local/bin/validate_container_artifact.py" in dockerfile
+
+
+def _packaged_recorddict(tmp_path: Path, monkeypatch) -> dict:
+    conf = Conf.__new__(Conf)
+    conf.verbose = False
+    monkeypatch.chdir(tmp_path)
+    conf.set_reclayouts()
+    recorddict = deepcopy(conf.recorddict)
+
+    for path in PACKAGED_LAYOUT_SOURCES.values():
+        with path.open(encoding="utf-8") as handle:
+            recorddict.update(json.load(handle))
+    return recorddict
+
+
+@pytest.mark.parametrize(
+    ("layout", "field", "expected"),
+    (
+        (
+            "T06NNNNXSPH",
+            "SOC",
+            {"value": 722, "length": 2, "type": "num", "divide": 1},
+        ),
+        (
+            "T06NNNNXMIN",
+            "bms_batterycurr",
+            {"value": 1034, "length": 2, "type": "numx", "divide": 100},
+        ),
+        (
+            "T06NNNNXMIN",
+            "epv1today",
+            {"value": 378, "length": 4, "type": "num", "divide": 10},
+        ),
+        (
+            "T06NNNNXTL3",
+            "datalogserial",
+            {"value": 16, "length": 10, "type": "text", "incl": "yes"},
+        ),
+        (
+            "T060120",
+            "Current_l2",
+            {
+                "value": 192,
+                "length": 4,
+                "type": "num",
+                "divide": 10,
+                "incl": "yes",
+            },
+        ),
+    ),
+)
+def test_packaged_external_layouts_preserve_builtin_contracts(
+    tmp_path,
+    monkeypatch,
+    layout,
+    field,
+    expected,
+):
+    recorddict = _packaged_recorddict(tmp_path, monkeypatch)
+
+    assert recorddict[layout][field] == expected
+
+
+def test_root_and_packaged_mod_layout_sources_are_identical():
+    assert _text(ROOT / "T06NNNNXMOD.json") == _text(
+        PACKAGED_LAYOUT_SOURCES["T06NNNNXMOD.json"]
+    )
 
 
 def test_images_embed_immutable_source_revision_and_version_labels():

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add an `offline` add-on mode that runs `grottserver` instead of the proxy, so the add-on keeps
+  producing data with no internet connection and without contacting Growatt at all.
+- Publish `grottserver` data records through Grott's existing `procdata()` pipeline, so MQTT
+  output and the Home Assistant discovery extension are identical in both modes.
+- Keep `proxy` as the default; the listen port is unchanged, so switching modes needs no
+  datalogger reconfiguration.
+
+
 ## 0.1.12 - prepared 2026-07-18
 
 The preparation date does not by itself claim publication. Check the GitHub Releases page for availability.

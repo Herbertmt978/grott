@@ -16,6 +16,29 @@ The add-on catalog stage remains `experimental`. The release has been tested wit
 
 The public tag may not exist until every release gate passes. On 2026-07-14, the fork owner confirmed that upstream redistribution permission has been obtained for this fork and its container images. That permission does not authorize commercial use or reuse unless Johan Meijer has separately agreed, and any financial reward or appreciation is directed to him. See the root `RELEASING.md`, `docs/LEGAL.md`, and [johanmeijer/grott#512](https://github.com/johanmeijer/grott/issues/512).
 
+## Modes
+
+| `mode` | Upstream connection | Growatt cloud / ShinePhone | Works without internet |
+| --- | --- | --- | --- |
+| `proxy` (default) | forwards to `server.growatt.com:5279` | keeps working | no |
+| `offline` | none; runs `grottserver` | stops receiving data | yes |
+
+`proxy` mirrors traffic on its way to Growatt. It cannot run without internet access: it opens
+the connection to Growatt before accepting the datalogger and closes the datalogger's socket if
+that fails, and even when that connection is kept open the proxy never replies to the
+datalogger, because acknowledgements come from the real Growatt server. With nothing upstream
+the datalogger is never acknowledged, retries, and its records do not parse.
+
+`offline` starts `grottserver` instead, which is a local stand-in for the Growatt server: it
+acknowledges data records itself, answers pings and handles time synchronisation. Records are
+published through the same `procdata()` pipeline as proxy mode, so MQTT output and the Home
+Assistant discovery extension behave identically.
+
+In `offline` mode the inverter no longer reports to Growatt, so ShinePhone and ShineServer stop
+updating. That is inherent to running without the cloud, not a defect. Use `proxy` to keep them.
+
+Both modes listen on the same port, so no datalogger reconfiguration is needed when switching.
+
 ## Recommended Setup
 
 Point each Growatt/ShineWiFi datalogger at your Home Assistant host on port `5279`.

@@ -26,6 +26,17 @@ PY
 }
 
 export gmode="$(json_get mode proxy)"
+
+# "offline" runs grottserver instead of the proxy. grottserver is a full local
+# stand-in for the Growatt server: it acknowledges the datalogger itself, so it
+# keeps working with no internet connection, whereas the proxy depends on the
+# real Growatt server to answer and stops producing data when it is unreachable.
+# Grott's own configuration only accepts proxy/sniff, so present "proxy" to it.
+GROTT_ENTRY=/app/grott.py
+if [ "$gmode" = "offline" ]; then
+  GROTT_ENTRY=/app/grottserver.py
+  export gmode=proxy
+fi
 export gblockcmd="$(json_get blockcmd true)"
 export gtime="$(json_get time server)"
 export gsendbuf="$(json_get sendbuf false)"
@@ -74,7 +85,7 @@ PY
 fi
 
 if [ "$(id -u)" -eq 0 ]; then
-  exec su-exec grott:grott "$GROTT_RUNNER" -u /app/grott.py -v
+  exec su-exec grott:grott "$GROTT_RUNNER" -u "$GROTT_ENTRY" -v
 fi
 
-exec "$GROTT_RUNNER" -u /app/grott.py -v
+exec "$GROTT_RUNNER" -u "$GROTT_ENTRY" -v

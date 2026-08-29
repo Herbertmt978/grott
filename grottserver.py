@@ -13,6 +13,15 @@ from datetime import datetime
 from urllib.parse import urlparse, parse_qs, parse_qsl  
 from collections import defaultdict
 
+# Reuse Grott's own configuration loader and record publisher so the standalone
+# server produces the same MQTT output (and runs the same extensions, including
+# the Home Assistant discovery plugin) as proxy mode does.
+from grottconf import Conf
+from grottdata import procdata
+
+# Populated in __main__; consulted by process_data() when publishing.
+conf = None
+
 # grottserver.py emulates the server.growatt.com website and is initial developed for debugging and testing grott.
 # Updated: 2023-09-19
 # Version:
@@ -1032,6 +1041,15 @@ class sendrecvserver:
             elif rectype in ("03", "04", "50", "1b", "20"):
                 # if datarecord send ack.
                 print("\t - Grottserver - " + header[12:16] + " data record received")
+
+                # Publish the record through Grott's normal pipeline. A publishing
+                # failure must never prevent the acknowledgement below, or the
+                # datalogger will keep retrying the same record.
+                if conf is not None:
+                    try:
+                        procdata(conf, data)
+                    except Exception as e:
+                        print("\t - Grottserver - data publishing failed: ", e)
                 
                 # create ack response
                 if header[6:8] == '02': 
@@ -1164,6 +1182,13 @@ class sendrecvserver:
 if __name__ == "__main__":
 
     print("\t - Grottserver - Version: " + verrel)
+
+    # Load grott.ini / environment configuration so MQTT settings, extensions and
+    # the listen port are shared with the rest of Grott.
+    conf = Conf(verrel)
+    if conf.verbose:
+        conf.print()
+    serverport = conf.grottport
 
     send_queuereg = {} 
     loggerreg = {}

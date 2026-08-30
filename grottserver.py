@@ -30,8 +30,44 @@ sendseq = 1
 ResponseWaitInterval = 0.5
 #Totaal time in seconds to wait on Iverter Response 
 MaxInverterResponseWait = 10 
-#Totaal time in seconds to wait on Datalogger Response 
+#Totaal time in seconds to wait on Datalogger Response
 MaxDataloggerResponseWait = 5
+
+#Keepalive settings for accepted datalogger connections. Idle seconds before
+#the first probe, seconds between probes, and failed probes before the kernel
+#closes the socket - so a vanished datalogger is detected in about 3.5 minutes.
+KeepaliveIdle = 120
+KeepaliveInterval = 30
+KeepaliveCount = 3
+
+
+def enable_keepalive(connection):
+    """Enable TCP keepalive on an accepted datalogger connection.
+
+    The server never closes an idle socket: a session the datalogger abandons
+    without a FIN stays ESTABLISHED here forever, and its entry in
+    send_queuereg is never reclaimed. Dataloggers allocate source ports from a
+    small fixed pool, so each orphan permanently consumes one. Once the pool is
+    exhausted the datalogger cannot open a connection at all and goes silent
+    until grottserver is restarted, which drops every socket and frees the pool
+    at once.
+
+    Keepalive makes the kernel reap those orphans on its own. The probes are
+    also traffic, which keeps stateful firewalls from expiring a legitimately
+    quiet session between records.
+
+    The TCP_* options are Linux-specific and guarded, so platforms without them
+    still get SO_KEEPALIVE at the system default interval.
+    """
+    connection.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    for option_name, value in (
+        ("TCP_KEEPIDLE", KeepaliveIdle),
+        ("TCP_KEEPINTVL", KeepaliveInterval),
+        ("TCP_KEEPCNT", KeepaliveCount),
+    ):
+        option = getattr(socket, option_name, None)
+        if option is not None:
+            connection.setsockopt(socket.IPPROTO_TCP, option, value)
 
 
 # Formats multi-line data
@@ -905,6 +941,11 @@ class sendrecvserver:
         try: 
             connection, client_address = s.accept()
             connection.setblocking(0)
+            try:
+                enable_keepalive(connection)
+            except OSError as e:
+                # Never refuse a connection because a socket option failed.
+                print("\t - Grottserver - could not enable keepalive: ", e)
             self.inputs.append(connection)
             self.outputs.append(connection)
             print(f"\t - Grottserver - Socket connection received from {client_address}")

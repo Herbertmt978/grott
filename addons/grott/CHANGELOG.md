@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Enable TCP keepalive on datalogger connections accepted by `grottserver`, so a session the datalogger abandons without a FIN is reaped by the kernel instead of held ESTABLISHED indefinitely. Dataloggers allocate source ports from a small fixed pool, so each orphaned socket permanently consumed one; once the pool was exhausted the datalogger could not connect at all and went silent until `grottserver` was restarted. The probes also keep stateful firewalls from expiring a legitimately quiet session between records.
+
 ## 0.1.12 - prepared 2026-07-18
 
 The preparation date does not by itself claim publication. Check the GitHub Releases page for availability.

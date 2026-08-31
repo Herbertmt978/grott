@@ -822,7 +822,12 @@ class sendrecvserver:
         self.inputs = [self.server]
         self.outputs = []
         self.send_queuereg = send_queuereg
-        
+        # Peer (address, port) of every accepted socket. getpeername() stops
+        # working the moment the peer disconnects, and both the writable
+        # handler and the cleanup path need the peer AFTER that point - see
+        # handle_writable_socket() and close_connection().
+        self.peers = {}
+
         print(f"\t - Grottserver - Ready to listen at: {host}:{port}")
 
     def run(self):
@@ -871,16 +876,17 @@ class sendrecvserver:
             if s.fileno() == -1 : 
                 print("\t - Grottserver - socket closed")
                 return
-            try: 
-                #try for debug 007
-                client_address, client_port = s.getpeername()
-            except: 
-                print("\t - Grottserver - socket closed :")
-                #print("\t\t ", s )
-                #s.close
-                pass
+            peer = self.peers.get(s)
+            if peer is None:
+                # Peer already gone. getpeername() used to be called here and
+                # its failure was swallowed with a bare except, which left
+                # client_address unbound and raised NameError on the very next
+                # line - once per pass, for every disconnect.
+                print("\t - Grottserver - socket closed, nothing to send")
+                return
+            client_address, client_port = peer
 
-            try: 
+            try:
                 qname = client_address + "_" + str(client_port)
                 next_msg = self.send_queuereg[qname].get_nowait()
                 if verbose:
@@ -909,6 +915,9 @@ class sendrecvserver:
             self.outputs.append(connection)
             print(f"\t - Grottserver - Socket connection received from {client_address}")
             client_address, client_port = connection.getpeername()
+            # Remember the peer while it is still reachable; close_connection()
+            # cannot ask the socket for it once the connection has dropped.
+            self.peers[connection] = (client_address, client_port)
             qname = client_address + "_" + str(client_port)
 
             #create queue
@@ -921,35 +930,40 @@ class sendrecvserver:
 
 
     def close_connection(self, s):
-        try: 
-            #client_address, client_port = s.getpeername() 
+        # Popped up front so a failure below can never strand the entry.
+        peer = self.peers.pop(s, None)
+        try:
             print("\t - Grottserver - Close connection : ", s)
-            #print(client_address, client_port)
             if s in self.outputs:
                 self.outputs.remove(s)
-            self.inputs.remove(s)
-            client_address, client_port = s.getpeername() 
-            qname = client_address + "_" + str(client_port)
-            del send_queuereg[qname]
-            ### after this also clean the logger reg. To be implemented ? 
-            for key in loggerreg.keys() : 
-                #print(key, loggerreg[key])
-                #print(key, loggerreg[key]["ip"], loggerreg[key]["port"])
-                if loggerreg[key]["ip"] == client_address and loggerreg[key]["port"] == client_port :
-                    del loggerreg[key] 
-                    print("\t - Grottserver - config information deleted for datalogger and connected inverters : ", key)
-                    # to be developed delete also register information for this datalogger (and  connected inverters).  Be aware this need redef of commandresp!
-                    break     
-            s.close()
-        
-        except Exception as e:
-            print("\t - Grottserver - exception in server thread - close connection :", e)   
-            #print("\t\t ", s )  
+            if s in self.inputs:
+                self.inputs.remove(s)
 
-            # try: 
-            #     s.close()
-            # except:     
-            #     print("\t - Grottserver - socket close error",s)
+            # This used to read the peer back with getpeername(). By the time a
+            # connection is being closed the peer is usually already gone, so
+            # that call raised [Errno 107] and took the whole registry cleanup
+            # and the s.close() below with it - every single time.
+            if peer is not None:
+                client_address, client_port = peer
+                qname = client_address + "_" + str(client_port)
+                send_queuereg.pop(qname, None)
+                ### after this also clean the logger reg. To be implemented ?
+                for key in list(loggerreg.keys()) :
+                    if loggerreg[key]["ip"] == client_address and loggerreg[key]["port"] == client_port :
+                        del loggerreg[key]
+                        print("\t - Grottserver - config information deleted for datalogger and connected inverters : ", key)
+                        # to be developed delete also register information for this datalogger (and  connected inverters).  Be aware this need redef of commandresp!
+                        break
+
+        except Exception as e:
+            print("\t - Grottserver - exception in server thread - close connection :", e)
+
+        finally:
+            # The fd must be released whatever happened above.
+            try:
+                s.close()
+            except OSError as e:
+                print("\t - Grottserver - socket close error : ", e)
 
     def check_connections(self):
         #""" Check if the client(s) are/is still connected """

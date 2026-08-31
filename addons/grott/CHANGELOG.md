@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remember an accepted connection's peer instead of reading it back with `getpeername()` during cleanup. That call fails once the peer is gone, which is exactly when both cleanup paths run: `close_connection` aborted before dropping the send queue and closing the socket, and `handle_writable_socket` fell through to an unbound `client_address` and logged a `NameError` on every pass — two log lines per disconnect, roughly 140k lines a day on a datalogger that reconnects each minute.
+
 ## 0.1.12 - prepared 2026-07-18
 
 The preparation date does not by itself claim publication. Check the GitHub Releases page for availability.

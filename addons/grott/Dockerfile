@@ -40,7 +40,9 @@ ENV PATH=/opt/venv/bin:$PATH \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 
+# Patch the OpenSSL and util-linux libraries inherited from the pinned base.
 RUN apk add --no-cache tzdata=2026b-r0 su-exec=0.3-r0 \
+        libcrypto3=3.5.8-r0 libssl3=3.5.8-r0 libuuid=2.42.3-r1 \
     && addgroup -g 10001 -S grott \
     && adduser -D -H -u 10001 -S -G grott grott \
     && rm -rf \
@@ -59,6 +61,7 @@ RUN apk add --no-cache tzdata=2026b-r0 su-exec=0.3-r0 \
 COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /app
+COPY LICENSE.md /app/LICENSE.md
 COPY grott.py grottconf.py grottdata.py grottlayout.py grottprotocol.py grottproxy.py grottserver.py grottsniffer.py /app/
 COPY grottext /app/grottext
 COPY examples/grott.ini /app/grott.ini

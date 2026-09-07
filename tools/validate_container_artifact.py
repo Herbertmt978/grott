@@ -21,6 +21,8 @@ from packaging.utils import canonicalize_name
 APP_DIR = Path("/app")
 VENV_SITE_PACKAGES = Path("/opt/venv/lib/python3.11/site-packages")
 EXPECTED_WHEEL_VERSION = "0.47.0"
+# Hash the complete license after normalising text line endings.
+EXPECTED_LICENSE_SHA256 = "66193a25f66e8d996db67e2ff14fe1d43ea26f1edd5c1f4a783280c3794d0c96"
 APPROVED_EXTERNAL_LAYOUTS = {
     "T06NNNNXMOD.json": {"T06NNNNXMOD"},
     "t060103xmax3.json": {"T060103XMAX"},
@@ -107,6 +109,7 @@ REQUIRED_MODULES = (
 REQUIRED_PAYLOADS = tuple(
     APP_DIR / relative
     for relative in (
+        "LICENSE.md",
         "grott.py",
         "grottconf.py",
         "grottdata.py",
@@ -391,7 +394,20 @@ def assert_no_build_tooling() -> None:
         )
 
 
+def assert_license_contract() -> None:
+    path = APP_DIR / "LICENSE.md"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise ArtifactValidationError(f"runtime license is missing or unreadable: {path}") from exc
+    require(
+        hashlib.sha256(text.encode("utf-8")).hexdigest() == EXPECTED_LICENSE_SHA256,
+        "runtime license does not match the complete reviewed LICENSE.md",
+    )
+
+
 def main() -> int:
+    assert_license_contract()
     sys.path.insert(0, str(APP_DIR))
     for module in REQUIRED_MODULES:
         import_module(module)

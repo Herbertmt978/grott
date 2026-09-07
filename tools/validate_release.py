@@ -321,6 +321,7 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
     )
 
     texts = {
+        "LICENSE.md": read_required_text(root, Path("LICENSE.md"), errors),
         "README.md": read_required_text(root, Path("README.md"), errors),
         "addons/grott/DOCS.md": read_required_text(
             root, Path("addons/grott/DOCS.md"), errors
@@ -396,6 +397,11 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
         dockerfile_lines = [
             line.strip() for line in texts[dockerfile_path].splitlines()
         ]
+        require(
+            errors,
+            "COPY LICENSE.md /app/LICENSE.md" in dockerfile_lines,
+            f"{dockerfile_path} must package LICENSE.md in the runtime image",
+        )
         require(
             errors,
             not any(
@@ -542,10 +548,9 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
     )
 
     release_gate_tokens = (
-        "upstream redistribution permission has been obtained",
+        "personal-use license or separate written permission",
         "Preserve the permission record outside this repository",
-        "does not authorize commercial use or reuse unless Johan Meijer",
-        "financial reward or appreciation is directed to him",
+        "/app/LICENSE.md",
         "protected default branch",
         "protected `release` environment",
         "protected `v*` tag ruleset",
@@ -569,17 +574,47 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
         all(token in releasing for token in release_gate_tokens),
         "RELEASING.md is missing a required release, recovery, permission, or commercial-use gate",
     )
+    license_text = texts["LICENSE.md"]
     require(
         errors,
-        "upstream redistribution permission has been obtained" in legal
+        license_text.startswith("# Grott Personal Use License\n")
+        and "Commercial use requires a separate written agreement with Johan Meijer."
+        in license_text,
+        "LICENSE.md must contain the personal-use license and commercial permission requirement",
+    )
+    for path, link in (
+        ("README.md", "(LICENSE.md)"),
+        ("addons/grott/DOCS.md", "(../../LICENSE.md)"),
+        ("RELEASING.md", "(LICENSE.md)"),
+        ("docs/LEGAL.md", "(../LICENSE.md)"),
+    ):
+        require(
+            errors,
+            link in texts[path]
+            and "Commercial use requires Johan Meijer's separate written agreement"
+            in texts[path]
+            and "a donation alone does not grant permission" in texts[path],
+            f"{path} must link to the governing personal-use license and explain commercial permission",
+        )
+        require(
+            errors,
+            not re.search(
+                r"does not add (?:a repository-level license|a license to inherited)"
+                r"|inherited files require separate explicit relicensing authority",
+                texts[path],
+                re.IGNORECASE,
+            ),
+            f"{path} contradicts the current personal-use licensing authority",
+        )
+    require(
+        errors,
+        "2026-09-07" in legal
+        and "authorised publication of a personal-use license" in legal
         and "Preserve the permission record outside this repository" in legal
-        and "does not authorize commercial use or reuse unless Johan Meijer" in legal
-        and "financial reward or appreciation is directed to him" in legal
-        and "Redistribution permission alone does not authorize relicensing" in legal
+        and "Third-party material supplied under separate licenses" in legal
         and "Public release still requires" in legal
-        and "Local/private testing" in legal
-        and "Publish Home Assistant and Docker images" not in legal,
-        "docs/LEGAL.md must record redistribution permission and commercial-use limits while preserving release gates",
+        and "Local/private testing" in legal,
+        "docs/LEGAL.md must record personal-use authority, third-party rights and release gates",
     )
 
     issue_dir = root / ".github" / "ISSUE_TEMPLATE"

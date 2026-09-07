@@ -8,17 +8,17 @@ This fork keeps the upstream history intact. It exists because the problem in up
 
 ## Current Status
 
-The current stable release line is `v0.1.12`, which promotes the external-layout packaging correction tested in `v0.1.12-beta` without changing runtime or layout behavior. `v0.1.12` is the repository Latest release when its matching release entry is present. `v0.1.12-beta` remains an immutable historical prerelease, alongside the earlier `v0.1.10-beta` and `v0.1.11-beta` records. On 2026-07-18, after the exact beta candidate remained healthy through a restart, published 164 successful Home Assistant states across both MOD devices, retained `[32, 32]` discovery entities, and recorded zero runtime errors, the owner explicitly waived the remaining observation window. That decision does not waive any PR, hosted-CI, protected-branch, tag, environment, image-validation, or release gate in [RELEASING.md](RELEASING.md). Read the [human-written release notes](docs/releases/v0.1.12.md) for the problem, evidence, and promotion boundary. The [GitHub releases listing](https://github.com/Herbertmt978/grott/releases) is the public reference. The Releases page is the supported-availability authority: absence means a candidate is unsupported, but does not prove that GHCR tags are absent because image promotion can precede release creation. Every image is supported only when its matching release entry exists.
+The current stable release line is `v0.1.13`, containing grottserver connection fixes, container security updates and license packaging. `v0.1.13` is the repository Latest release when its matching release entry is present. `v0.1.12-beta` remains an immutable historical prerelease; v0.1.12 remains the previous stable release. For that earlier beta only, the owner explicitly waived the remaining observation window on 2026-07-18 after its recorded two-device checks. This historical waiver does not apply to 0.1.13. Read the [human-written release notes](docs/releases/v0.1.13.md). The [GitHub releases listing](https://github.com/Herbertmt978/grott/releases) is the public reference. The Releases page is the supported-availability authority: absence means a candidate is unsupported, but does not prove that GHCR tags are absent because image promotion can precede release creation. Every image is supported only when its matching release entry exists.
 
 | Version domain | Version | Meaning |
 | --- | --- | --- |
-| Fork/add-on release | `0.1.12` | The current stable Docker release and matching Home Assistant add-on metadata. |
+| Fork/add-on release | `0.1.13` | The current stable Docker release and matching Home Assistant add-on metadata. |
 | Bundled Grott core (upstream startup version) | `2.8.3` | The version printed by the inherited Grott entry point; fork fixes are carried on top of that core. |
 | Bundled Home Assistant extension | `0.0.8` | The in-repository `grott_ha.py` extension used for MQTT discovery and state. |
 
-The Home Assistant add-on catalog stage remains `experimental`. This release has been tested with two real ShineWiFi/MOD inverters and with sanitized layout fixtures for generic, SPH, SPA, TL3, MIN, and T060120-style packets. Fixture/container coverage is not real-hardware validation for those other families, so treat new hardware combinations as testing until values have been compared with ShinePhone.
+The Home Assistant add-on catalog stage remains `experimental`. Previous releases received live testing with two ShineWiFi/MOD inverters; this candidate requires its own controlled UAT. Sanitized layout fixtures cover generic, SPH, SPA, TL3, MIN, and T060120-style packets. Fixture/container coverage is not real-hardware validation for those other families, so treat new hardware combinations as testing until values have been compared with ShinePhone.
 
-Published images are available on GHCR. The `0.1.12` image targets the same platform set and is supported only when its matching release entry exists on this repository's Releases page; publication remains subject to every gate in [RELEASING.md](RELEASING.md):
+Published images are available on GHCR. The `0.1.13` image targets the same platform set and is supported only when its matching release entry exists on this repository's Releases page; publication remains subject to every gate in [RELEASING.md](RELEASING.md):
 
 - `amd64`
 - `aarch64`
@@ -54,7 +54,7 @@ Growatt datalogger -> Grott -> Growatt servers
 
 In proxy mode, your ShinePhone app can continue to work because Grott forwards the packets to Growatt after reading them. Grott listens on TCP port `5279` by default.
 
-Sniff mode still exists upstream, but it needs packet routing and elevated network permissions. The v0.1.12 images and supplied Compose profile are qualified for proxy mode only. If an existing installation uses `server` or `sniff`, keep that installation in place; this release does not provide a supported packaged migration for those modes.
+Sniff mode still exists upstream, but it needs packet routing and elevated network permissions. The v0.1.13 images and supplied Compose profile are qualified for proxy mode only. If an existing installation uses `server` or `sniff`, keep that installation in place; this release does not provide a supported packaged migration for those modes.
 
 ## Before You Start
 
@@ -146,14 +146,14 @@ The examples use placeholders and contain no real or stable device identifiers.
 
 Use this if Grott will run on a separate Linux server, NAS, or VM.
 
-**Availability check:** use the repository image below only when `v0.1.12` appears on this repository's Releases page. Until that entry exists, the image is unsupported even if a GHCR tag is temporarily visible during promotion. The hardened settings are qualified with the matching `0.1.12` image and should not be assumed to work unchanged with an older image.
+**Availability check:** use the repository image below only when `v0.1.13` appears on this repository's Releases page. Until that entry exists, the image is unsupported even if a GHCR tag is temporarily visible during promotion. The hardened settings are qualified with the matching `0.1.13` image and should not be assumed to work unchanged with an older image.
 
 Create `docker-compose.yml`:
 
 ```yaml
 services:
   grott:
-    image: ghcr.io/herbertmt978/grott:0.1.12
+    image: ghcr.io/herbertmt978/grott:0.1.13
     container_name: grott
     restart: unless-stopped
     init: true
@@ -350,7 +350,7 @@ The default `v0_1_9_standard` profile automatically reconciles Grott-owned extra
 For Docker, change only the image first:
 
 ```yaml
-    image: ghcr.io/herbertmt978/grott:0.1.12
+    image: ghcr.io/herbertmt978/grott:0.1.13
 ```
 
 Only make that change after the release is declared supported on the Releases page. Before then it is unsupported, even if a failed publication attempt left a GHCR tag behind.
@@ -426,13 +426,13 @@ If ShinePhone stops updating:
 
 Back up the active `grott.ini` before a Docker update. Before any Home Assistant UAT, including Docker-backed Home Assistant, create a full Home Assistant backup named **Grott pre-update rollback**, wait for it to report completed, verify it is visible and covers the entity registry/configuration, and retain its backup ID. Preserve retained MQTT discovery through that backup when it includes Mosquitto, or take a separate broker snapshot. Without that verified recovery set, UAT must not begin. Also record which process owns TCP port `5279`; only one Grott service or forwarder may listen there during rollback.
 
-For this release, the verified previous live fork image is the immutable `0.1.12-beta`. Pinning its exact four-platform manifest is the most precise Docker rollback:
+For this release, the verified previous live fork image is the immutable `0.1.12`. Pinning its exact four-platform manifest is the most precise Docker rollback:
 
 ```yaml
-image: ghcr.io/herbertmt978/grott@sha256:066d806774a147bc4c448761d026eb831cdcfa29bc32ef3a1c361a36a2ea361a
+image: ghcr.io/herbertmt978/grott@sha256:40765fbd328056e39dd0d7752253fd94091551808290995f695ef2fa3753c7a3
 ```
 
-The equivalent readable tag is `ghcr.io/herbertmt978/grott:0.1.12-beta`; both `0.1.12-beta` and `v0.1.12-beta` were verified to resolve to that manifest on 2026-07-18.
+The equivalent readable tag is `ghcr.io/herbertmt978/grott:0.1.12`; both `0.1.12` and `v0.1.12` were verified to resolve to that manifest on 2026-09-07.
 
 Then restart:
 
@@ -442,7 +442,7 @@ docker compose up -d
 
 For Home Assistant, the only supported rollback is the verified **Grott pre-update rollback** backup: stop the candidate, restore that named full backup by its recorded ID, and confirm the restored add-on options before starting anything. Start exactly one Grott listener or forwarder on TCP `5279`.
 
-For evidence, the previous `0.1.12-beta` add-on manifest was independently verified as `ghcr.io/herbertmt978/grott-ha-docker@sha256:410f2b2e4dfe810aa1d9d8b8591eaae0852ae9f61486d78f663cd6a95c2ab6f1`; the digest does not make historical add-on installation from the current repository a supported rollback mechanism.
+For evidence, the previous `0.1.12` add-on manifest was independently verified as `ghcr.io/herbertmt978/grott-ha-docker@sha256:904a58273d06e6279e22524a58a8749c26eb0bb320a19a66cb7e43f4948b1327`; the digest does not make historical add-on installation from the current repository a supported rollback mechanism.
 
 After either rollback, wait for a fresh packet, confirm `grott_last_push` advances, compare several power and energy values with ShinePhone, confirm ShinePhone itself still receives new data through the proxy path, and verify Home Assistant Repairs has no new Grott unit or statistics warnings.
 

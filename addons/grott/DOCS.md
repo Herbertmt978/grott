@@ -2,21 +2,25 @@
 
 Grott HA Docker is an experimental Home Assistant add-on for the stable Grott fork release. It runs Grott in proxy mode, forwards packets to Growatt, and publishes sane Home Assistant MQTT discovery using guarded layout selection.
 
-Current stable release line: `0.1.12`. It promotes the correction tested in `0.1.12-beta` without changing runtime or layout behavior, and is supported only when the matching GitHub release exists. On 2026-07-18, the owner explicitly waived the remaining observation window after the exact beta candidate passed restart, two-device state publication, retained `[32, 32]` discovery, and zero-error checks; every other publication gate remains mandatory. Its [human-written release notes](../../docs/releases/v0.1.12.md) explain the problem, fix, reason, evidence, and user benefit. This add-on uses `ghcr.io/herbertmt978/grott-ha-docker:0.1.12`; Home Assistant selects the image tag matching the add-on version instead of building on the HA box.
+Current stable release line: `0.1.13`. It includes grottserver connection fixes, container security updates and license packaging, and is supported only when the matching GitHub release exists. The [human-written release notes](../../docs/releases/v0.1.13.md) explain the changes and their limits. This add-on uses `ghcr.io/herbertmt978/grott-ha-docker:0.1.13`; Home Assistant selects the image tag matching the add-on version instead of building on the HA box.
 
-The add-on catalog stage remains `experimental`. The release has been tested with two real ShineWiFi/MOD inverters. SPH, MIN, TL3, T060120, and other unavailable families are fixture/container tested, not real-hardware tested, and may still need new sanitized fixtures before every sensor is correct.
+The add-on catalog stage remains `experimental`. Previous releases received live testing with two ShineWiFi/MOD inverters; 0.1.13 requires its own controlled UAT. SPH, MIN, TL3, T060120, and other unavailable families are fixture/container tested, not real-hardware tested, and may still need new sanitized fixtures before every sensor is correct.
 
 | Version domain | Version | Meaning |
 | --- | --- | --- |
-| Fork/add-on release | `0.1.12` | The current stable release metadata and matching image, supported only when its GitHub release exists. |
+| Fork/add-on release | `0.1.13` | The current stable release metadata and matching image, supported only when its GitHub release exists. |
 | Bundled Grott core (upstream startup version) | `2.8.3` | The version printed at startup by the inherited Grott entry point, with this fork's fixes applied on top. |
 | Bundled Home Assistant extension | `0.0.8` | The in-repository MQTT discovery and state extension. |
 
-`0.1.1-beta` was skipped for users because its first multi-architecture image publish failed. The exact previous live rollback version is the immutable `0.1.12-beta`; the stable `v0.1.12` release will be marked Latest when its matching GitHub release exists.
+`0.1.1-beta` was skipped for users because its first multi-architecture image publish failed. The exact previous live rollback version is the immutable `0.1.12`; the stable `v0.1.13` release will be marked Latest when its matching GitHub release exists.
 
 The public tag may not exist until every release gate passes. This fork is available for personal, non-commercial use under the [Grott Personal Use License](../../LICENSE.md). Commercial use requires Johan Meijer's separate written agreement; a donation alone does not grant permission. New images include the license at `/app/LICENSE.md`. See [licensing status](../../docs/LEGAL.md) for its scope and [RELEASING.md](../../RELEASING.md) for publication checks. Historical images retain their recorded terms.
 
 ## Recommended Setup
+
+Historical `0.1.12-beta` UAT and its July observation waiver remain recorded in
+the older release notes; they do not qualify this candidate. Version 0.1.13
+requires its own controlled test and backup/rollback evidence.
 
 Point each Growatt/ShineWiFi datalogger at your Home Assistant host on port `5279`.
 
@@ -165,20 +169,20 @@ Use `--keep pvpowerout,SOC` instead of `--all` when you want to preserve known-g
 
 Before testing this release, create and verify the named full Home Assistant backup **Grott pre-update rollback** as described above. Without that verified backup, UAT must not begin. If UAT fails:
 
-1. Stop `0.1.12` so it releases TCP port `5279`.
+1. Stop `0.1.13` so it releases TCP port `5279`.
 2. Restore **Grott pre-update rollback** by its recorded backup ID; this is the only supported Home Assistant rollback path.
 3. Confirm the restored add-on options before starting anything.
 4. Start exactly one Grott listener or forwarder on port `5279`.
 5. Wait for a new packet and confirm `grott_last_push` advances.
 6. Compare representative Home Assistant values with ShinePhone, confirm ShinePhone continues updating, and verify Home Assistant Repairs and retained MQTT state returned to the recorded baseline.
 
-For evidence, the independently verified previous live `0.1.12-beta` add-on manifest is:
+For evidence, the independently verified previous live `0.1.12` add-on manifest is:
 
 ```text
-ghcr.io/herbertmt978/grott-ha-docker@sha256:410f2b2e4dfe810aa1d9d8b8591eaae0852ae9f61486d78f663cd6a95c2ab6f1
+ghcr.io/herbertmt978/grott-ha-docker@sha256:904a58273d06e6279e22524a58a8749c26eb0bb320a19a66cb7e43f4948b1327
 ```
 
-Both `ghcr.io/herbertmt978/grott-ha-docker:0.1.12-beta` and `:v0.1.12-beta` resolved to that four-platform manifest on 2026-07-18. The matching Docker runtime rollback manifest is `ghcr.io/herbertmt978/grott@sha256:066d806774a147bc4c448761d026eb831cdcfa29bc32ef3a1c361a36a2ea361a`.
+Both `ghcr.io/herbertmt978/grott-ha-docker:0.1.12` and `:v0.1.12` resolved to that four-platform manifest on 2026-09-07. The matching Docker runtime rollback manifest is `ghcr.io/herbertmt978/grott@sha256:40765fbd328056e39dd0d7752253fd94091551808290995f695ef2fa3753c7a3`.
 
 The digest is verification evidence only; the current add-on repository does not provide historical-version reinstall as a supported rollback path.
 

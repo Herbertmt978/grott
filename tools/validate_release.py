@@ -52,7 +52,7 @@ REVIEWED_DOCKERIGNORE_NEGATIONS = (
     "!/examples/grott.ini",
     "!/.env.example",
 )
-EXPECTED_RELEASE_PREPARED_DATE = "2026-07-18"
+EXPECTED_RELEASE_PREPARED_DATE = "2026-09-07"
 EXPECTED_GROTT_STARTUP_VERSION = "2.8.3"
 EXPECTED_HA_EXTENSION_VERSION = "0.0.8"
 EXPECTED_RUNTIME_IMAGE = "ghcr.io/herbertmt978/grott"
@@ -64,11 +64,12 @@ STALE_WAIVER_LIFECYCLE_PHRASES = (
     "unpublished candidate add-on metadata",
     "this release is beta software. it is being tested",
 )
+ROLLBACK_VERSION = "0.1.12"
 ROLLBACK_RUNTIME_DIGEST = (
-    "sha256:066d806774a147bc4c448761d026eb831cdcfa29bc32ef3a1c361a36a2ea361a"
+    "sha256:40765fbd328056e39dd0d7752253fd94091551808290995f695ef2fa3753c7a3"
 )
 ROLLBACK_ADDON_DIGEST = (
-    "sha256:410f2b2e4dfe810aa1d9d8b8591eaae0852ae9f61486d78f663cd6a95c2ab6f1"
+    "sha256:904a58273d06e6279e22524a58a8749c26eb0bb320a19a66cb7e43f4948b1327"
 )
 PUBLISH_STEP_SEQUENCE = (
     "Check out validated source SHA",
@@ -522,7 +523,7 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
 
     rollback_docs = readme + "\n" + addon_docs + "\n" + releasing
     unsupported_ha_reinstall = re.compile(
-        r"\breinstall(?:ing)?(?:\s+the)?\s+add-on(?:\s+version)?\s+`?\d+\.\d+\.\d+-beta`?",
+        r"\breinstall(?:ing)?(?:\s+the)?\s+add-on(?:\s+version)?\s+`?v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?`?",
         re.IGNORECASE,
     )
     require(
@@ -530,17 +531,27 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
         unsupported_ha_reinstall.search(rollback_docs) is None,
         "rollback docs must not recommend historical add-on reinstall from the current repository",
     )
-    require(
-        errors,
-        "0.1.12-beta" in readme
-        and "0.1.12-beta" in addon_docs
-        and "0.1.12-beta" in releasing
-        and ROLLBACK_RUNTIME_DIGEST in readme
-        and ROLLBACK_RUNTIME_DIGEST in releasing
-        and ROLLBACK_ADDON_DIGEST in addon_docs
-        and ROLLBACK_ADDON_DIGEST in releasing,
-        "rollback docs must use the independently verified 0.1.12-beta manifests",
-    )
+    for path, text in (
+        ("README.md", readme),
+        ("addons/grott/DOCS.md", addon_docs),
+        ("RELEASING.md", releasing),
+    ):
+        rollback = text.partition("\n## Rollback\n")[2].split("\n## ", 1)[0]
+        expected_images = {
+            EXPECTED_RUNTIME_IMAGE: ROLLBACK_RUNTIME_DIGEST,
+            EXPECTED_ADDON_IMAGE: ROLLBACK_ADDON_DIGEST,
+        }
+        image_tags = re.findall(
+            r"ghcr\.io/herbertmt978/grott(?:-ha-docker)?:([0-9A-Za-z.-]+)",
+            rollback,
+        )
+        require(
+            errors,
+            f"`{ROLLBACK_VERSION}`" in rollback
+            and all(f"{image}@{digest}" in rollback for image, digest in expected_images.items())
+            and all(tag in (ROLLBACK_VERSION, f"v{ROLLBACK_VERSION}") for tag in image_tags),
+            f"{path}: rollback section must use the independently verified {ROLLBACK_VERSION} manifests and tags",
+        )
     require(
         errors,
         "ledidobe/grott" not in rollback_docs,

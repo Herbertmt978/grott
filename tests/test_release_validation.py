@@ -744,7 +744,7 @@ def copy_release_inputs(destination: Path) -> None:
         destination / "tools",
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
-    for filename in ("README.md", "RELEASING.md", "grott.py", ".dockerignore"):
+    for filename in ("README.md", "LICENSE.md", "RELEASING.md", "grott.py", ".dockerignore"):
         shutil.copy2(ROOT / filename, destination / filename)
 
 

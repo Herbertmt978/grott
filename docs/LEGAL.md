@@ -1,18 +1,25 @@
 # Licensing and Distribution Status
 
-This fork preserves the upstream Grott Git history and does not add a repository-level license to inherited upstream code.
+The [Grott Personal Use License](../LICENSE.md) is the governing license for material in this fork that its copyright holders have authorised to be distributed under it. It allows personal, non-commercial use, modification and free sharing on its stated terms. Commercial use requires Johan Meijer's separate written agreement; a donation alone does not grant permission. This page explains the history and publication requirements; it does not grant additional rights.
 
-Upstream Grott currently does not include a license file that GitHub detects. On 2026-07-14, the fork owner confirmed that upstream redistribution permission has been obtained for this fork and its container images. Preserve the permission record outside this repository unless upstream publishes an explicit repository licence. This permission record does not authorize commercial use or reuse unless Johan Meijer has separately agreed and any financial reward or appreciation is directed to him. Redistribution permission alone does not authorize relicensing; inherited files require separate explicit relicensing authority unless the preserved permission record expressly grants it.
+## Authorisation and scope
 
-Local/private testing from a reviewed checkout may continue. Public release still requires the repository controls, hosted CI, protected tag, release workflow, UAT, and rollback gates described in `RELEASING.md`. Keep upstream history and attribution intact.
+On 2026-09-07, the fork owner confirmed that Johan Meijer had authorised publication of a personal-use license for his code. This is the authority for adding `LICENSE.md`, and is separate from the redistribution permission recorded on 2026-07-14. Preserve the permission record outside this repository.
 
-The practical approach for this fork is:
+The license replaces this fork's earlier statements that it provided no repository-level license for the material now covered. It does not relicense another contributor's work without that contributor's authorisation. Third-party material supplied under separate licenses keeps those terms, notices and attribution. Upstream Git history and copyright remain intact. Publishing the license here does not change the upstream repository or rewrite the terms of older immutable releases and images.
 
-- Keep upstream copyright, history, and attribution intact.
-- Keep the candidate clearly marked as experimental.
-- Do not publish a new Home Assistant add-on, Docker image, Git tag, or GitHub release unless the `RELEASING.md` gates pass.
-- Ask upstream to add an explicit licence when possible, or retain the written redistribution permission record before any public release.
+## Distribution and release checks
 
-Relevant upstream issue: https://github.com/johanmeijer/grott/issues/512
+Local/private testing may continue within the license or other applicable permission. Public release still requires the repository controls, hosted CI, protected tag, release workflow, UAT and rollback gates in [RELEASING.md](../RELEASING.md).
 
-Rechecked on 2026-07-14 before owner confirmation: the issue was still open, the maintainer's recorded position remained that the default no-licence/all-rights-retained rules apply, and the fork owner's 2026-04-25 request for redistribution permission had no maintainer response in the public issue.
+- Keep upstream copyright, history and attribution intact.
+- Keep the add-on's experimental status until it is separately qualified for promotion.
+- Include the complete `LICENSE.md` at `/app/LICENSE.md` in both new container images. The artifact validator checks it before publication.
+- Confirm that every included contribution and third-party dependency is covered by the license or its own permission and retain the required notices.
+- Obtain Johan's separate written agreement before any commercial use. An acknowledgement, donation or unanswered request is not permission.
+
+## Earlier permission record
+
+On 2026-07-14, the fork owner confirmed redistribution permission for this fork and its container images. That permission alone did not authorise relicensing. The subsequent personal-use authorisation above is what supports the new license.
+
+The earlier discussion in [johanmeijer/grott#512](https://github.com/johanmeijer/grott/issues/512) and the published release notes are historical records. They are not the current license for the material covered by `LICENSE.md`.

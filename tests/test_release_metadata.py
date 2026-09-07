@@ -38,7 +38,7 @@ def copy_release_metadata(destination: Path) -> None:
     for directory in (".github", "addons", "docker", "docs", "examples"):
         ignore = shutil.ignore_patterns("aegis") if directory == "docs" else None
         shutil.copytree(ROOT / directory, destination / directory, ignore=ignore)
-    for filename in ("README.md", "grott.py", ".dockerignore"):
+    for filename in ("README.md", "LICENSE.md", "grott.py", ".dockerignore"):
         shutil.copy2(ROOT / filename, destination / filename)
     releasing = ROOT / "RELEASING.md"
     if releasing.exists():
@@ -325,10 +325,10 @@ def test_release_runbook_records_every_hard_gate_and_recovery_path() -> None:
     text = path.read_text(encoding="utf-8")
 
     for required in (
-        "upstream redistribution permission has been obtained",
+        "personal-use license or separate written permission",
         "Preserve the permission record outside this repository",
-        "does not authorize commercial use or reuse unless Johan Meijer",
-        "financial reward or appreciation is directed to him",
+        "Commercial use requires Johan Meijer's separate written agreement",
+        "/app/LICENSE.md",
         "protected default branch",
         "protected `release` environment",
         "protected `v*` tag ruleset",
@@ -351,31 +351,57 @@ def test_release_runbook_records_every_hard_gate_and_recovery_path() -> None:
         assert required in text
 
 
-def test_legal_status_records_permission_and_commercial_use_limit() -> None:
+def test_legal_status_records_personal_use_authority_and_commercial_use_limit() -> None:
     legal = (ROOT / "docs/LEGAL.md").read_text(encoding="utf-8")
 
-    assert "upstream redistribution permission has been obtained" in legal
+    assert "2026-09-07" in legal
+    assert "authorised publication of a personal-use license" in legal
     assert "Preserve the permission record outside this repository" in legal
-    assert "does not authorize commercial use or reuse unless Johan Meijer" in legal
-    assert "financial reward or appreciation is directed to him" in legal
+    assert "Third-party material supplied under separate licenses" in legal
     assert "Public release still requires" in legal
     assert "Local/private testing" in legal
     assert "Publish Home Assistant and Docker images" not in legal
-    assert "Redistribution permission alone does not authorize relicensing" in legal
+    assert "That permission alone did not authorise relicensing" in legal
 
     public_docs = (
         ROOT / "README.md",
         ROOT / "addons/grott/DOCS.md",
         ROOT / "RELEASING.md",
         ROOT / "docs/LEGAL.md",
-        ROOT / "docs/releases" / f"{CURRENT_RELEASE_TAG}.md",
     )
     for path in public_docs:
         text = path.read_text(encoding="utf-8")
-        assert "redistribution permission has been obtained" in text
-        assert "does not authorize commercial use or reuse unless Johan Meijer" in text
-        assert "financial reward or appreciation is directed to him" in text
+        assert "LICENSE.md)" in text
+        assert "Commercial use requires Johan Meijer's separate written agreement" in text
+        assert "a donation alone does not grant permission" in text
         assert "No public redistribution release may be made until" not in text
+
+
+@pytest.mark.parametrize("filename", ["README.md", "docs/LEGAL.md"])
+def test_release_validator_rejects_restored_no_license_notice(tmp_path: Path, filename: str) -> None:
+    copy_release_metadata(tmp_path)
+    path = tmp_path / filename
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("\nThis fork does not add a repository-level license to inherited upstream code.\n")
+    errors = validate_release.validate_worktree(tmp_path)
+    assert any(f"{filename} contradicts" in error for error in errors), errors
+
+
+@pytest.mark.parametrize("filename", ["docker/dockerfile", "addons/grott/Dockerfile"])
+def test_release_validator_rejects_missing_license_copy(tmp_path: Path, filename: str) -> None:
+    copy_release_metadata(tmp_path)
+    path = tmp_path / filename
+    text = path.read_text(encoding="utf-8").replace("COPY LICENSE.md /app/LICENSE.md\n", "")
+    path.write_text(text, encoding="utf-8")
+    errors = validate_release.validate_worktree(tmp_path)
+    assert any(f"{filename} must package LICENSE.md" in error for error in errors), errors
+
+
+def test_release_validator_rejects_missing_root_license(tmp_path: Path) -> None:
+    copy_release_metadata(tmp_path)
+    (tmp_path / "LICENSE.md").unlink()
+    errors = validate_release.validate_worktree(tmp_path)
+    assert any("LICENSE.md" in error for error in errors), errors
 
 
 def test_release_validator_rejects_incomplete_layout_allowlist(tmp_path: Path) -> None:
@@ -575,7 +601,7 @@ def test_release_validator_rejects_missing_publication_gate(tmp_path: Path) -> N
     releasing_path = tmp_path / "RELEASING.md"
     if releasing_path.exists():
         text = releasing_path.read_text(encoding="utf-8").replace(
-            "upstream redistribution permission has been obtained",
+            "personal-use license or separate written permission",
             "upstream permission is assumed",
             1,
         )

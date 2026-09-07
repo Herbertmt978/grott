@@ -1,6 +1,6 @@
 services:
   grott:
-    image: ghcr.io/herbertmt978/grott:0.1.12
+    image: ghcr.io/herbertmt978/grott:0.1.13
     container_name: grott
     restart: unless-stopped
     init: true

@@ -52,7 +52,7 @@ REVIEWED_DOCKERIGNORE_NEGATIONS = (
     "!/examples/grott.ini",
     "!/.env.example",
 )
-EXPECTED_RELEASE_PREPARED_DATE = "2026-07-18"
+EXPECTED_RELEASE_PREPARED_DATE = "2026-09-07"
 EXPECTED_GROTT_STARTUP_VERSION = "2.8.3"
 EXPECTED_HA_EXTENSION_VERSION = "0.0.8"
 EXPECTED_RUNTIME_IMAGE = "ghcr.io/herbertmt978/grott"
@@ -65,10 +65,10 @@ STALE_WAIVER_LIFECYCLE_PHRASES = (
     "this release is beta software. it is being tested",
 )
 ROLLBACK_RUNTIME_DIGEST = (
-    "sha256:066d806774a147bc4c448761d026eb831cdcfa29bc32ef3a1c361a36a2ea361a"
+    "sha256:40765fbd328056e39dd0d7752253fd94091551808290995f695ef2fa3753c7a3"
 )
 ROLLBACK_ADDON_DIGEST = (
-    "sha256:410f2b2e4dfe810aa1d9d8b8591eaae0852ae9f61486d78f663cd6a95c2ab6f1"
+    "sha256:904a58273d06e6279e22524a58a8749c26eb0bb320a19a66cb7e43f4948b1327"
 )
 PUBLISH_STEP_SEQUENCE = (
     "Check out validated source SHA",
@@ -539,7 +539,7 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
         and ROLLBACK_RUNTIME_DIGEST in releasing
         and ROLLBACK_ADDON_DIGEST in addon_docs
         and ROLLBACK_ADDON_DIGEST in releasing,
-        "rollback docs must use the independently verified 0.1.12-beta manifests",
+        "rollback docs must use the independently verified 0.1.12 manifests",
     )
     require(
         errors,

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.1.13 - prepared 2026-09-07
+
+The preparation date does not by itself claim publication. Check the GitHub Releases page for availability.
+
+- Enable TCP keepalive for accepted standalone grottserver connections.
+- Clean up disconnected sockets and their queues/logger registrations, including rapid same-peer reconnections.
+- Update pinned Alpine crypto and UUID packages and include LICENSE.md in both container images.
+- Preserve the reviewed three-file allowlist, built-in layouts and Home Assistant discovery behavior, with fixture/container regression coverage.
+- Keep proxy as the packaged mode; offline MQTT, battery controls and encrypted-session support are not included.
+
 ## 0.1.12 - prepared 2026-07-18
 
 The preparation date does not by itself claim publication. Check the GitHub Releases page for availability.

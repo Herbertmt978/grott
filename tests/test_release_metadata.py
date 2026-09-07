@@ -12,14 +12,14 @@ from tools import validate_release
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RELEASE_PREPARED_DATE = "2026-07-18"
-CURRENT_RELEASE_VERSION = "0.1.12"
+RELEASE_PREPARED_DATE = "2026-09-07"
+CURRENT_RELEASE_VERSION = "0.1.13"
 CURRENT_RELEASE_TAG = f"v{CURRENT_RELEASE_VERSION}"
 ROLLBACK_RUNTIME_DIGEST = (
-    "sha256:066d806774a147bc4c448761d026eb831cdcfa29bc32ef3a1c361a36a2ea361a"
+    "sha256:40765fbd328056e39dd0d7752253fd94091551808290995f695ef2fa3753c7a3"
 )
 ROLLBACK_ADDON_DIGEST = (
-    "sha256:410f2b2e4dfe810aa1d9d8b8591eaae0852ae9f61486d78f663cd6a95c2ab6f1"
+    "sha256:904a58273d06e6279e22524a58a8749c26eb0bb320a19a66cb7e43f4948b1327"
 )
 
 
@@ -51,7 +51,7 @@ def copy_release_metadata(destination: Path) -> None:
     )
 
 
-def test_release_preparation_targets_v012_stable() -> None:
+def test_release_preparation_targets_v013_stable() -> None:
     assert canonical_release_version() == CURRENT_RELEASE_VERSION
     assert curated_release_notes_path().name == f"{CURRENT_RELEASE_TAG}.md"
 
@@ -76,7 +76,7 @@ def test_current_release_metadata_is_aligned() -> None:
     assert f"docs/releases/v{release_version}.md" in readme
     assert f"ghcr.io/herbertmt978/grott:{release_version}" in readme
     assert f"Current stable release line: `{release_version}`" in addon_docs
-    assert "`v0.1.12` is the repository Latest release" in readme
+    assert f"`{CURRENT_RELEASE_TAG}` is the repository Latest release" in readme
     assert "`v0.1.12-beta` remains an immutable historical prerelease" in readme
     assert "owner explicitly waived the remaining observation window" in readme
     assert "Releases page is the supported-availability authority" in readme

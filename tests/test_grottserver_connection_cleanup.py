@@ -10,6 +10,7 @@ drop the send queue or close the file descriptor.
 import ast
 from pathlib import Path
 import socket
+import select
 from unittest.mock import Mock
 
 import pytest
@@ -191,3 +192,43 @@ def test_socket_is_closed_even_when_logger_registry_is_malformed(server, accepte
     assert connection.fileno() == -1
     assert qname not in registries
     assert connection not in server.peers
+
+
+def test_readable_eof_reaps_repeated_connections(server, registries, capsys):
+    """Exercise select/read/cleanup, not only direct calls to close_connection."""
+    for _ in range(100):
+        client = socket.create_connection(server.server.getsockname())
+        try:
+            server.handle_new_connection(server.server)
+            connection = next(sock for sock in server.inputs if sock is not server.server)
+            address, port = client.getsockname()
+            grottserver.loggerreg["reconnecting"] = {"ip": address, "port": port}
+            client.shutdown(socket.SHUT_WR)
+            readable, _, _ = select.select([connection], [], [], 2)
+            assert readable == [connection]
+            server.handle_readable_socket(connection)
+            assert connection.fileno() == -1
+            assert server.inputs == [server.server]
+            assert not server.outputs
+            assert not server.peers
+            assert not registries
+            assert not grottserver.loggerreg
+        finally:
+            client.close()
+    assert "exception in server thread" not in capsys.readouterr().out
+
+
+def test_read_error_reaps_registered_connection(server, registries):
+    connection = Mock()
+    connection.recv.side_effect = ConnectionResetError("peer reset")
+    listener = Mock()
+    listener.accept.return_value = (connection, ("127.0.0.1", 12345))
+    server.handle_new_connection(listener)
+
+    server.handle_readable_socket(connection)
+
+    connection.close.assert_called_once()
+    assert connection not in server.inputs
+    assert connection not in server.outputs
+    assert connection not in server.peers
+    assert not registries

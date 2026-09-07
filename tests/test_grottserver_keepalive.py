@@ -77,3 +77,29 @@ def test_handle_new_connection_enables_keepalive_on_accepted_socket():
     }
 
     assert "enable_keepalive" in called_names
+
+
+@pytest.mark.parametrize("option_failure", [False, True])
+def test_accept_registers_connection_even_if_keepalive_options_fail(monkeypatch, option_failure):
+    registry = {}
+    monkeypatch.setattr(grottserver, "send_queuereg", registry, raising=False)
+    calls = []
+
+    def configure(connection):
+        calls.append(connection)
+        if option_failure:
+            raise OSError("option unavailable")
+
+    monkeypatch.setattr(grottserver, "enable_keepalive", configure)
+    server = grottserver.sendrecvserver("127.0.0.1", 0, registry)
+    client = socket.create_connection(server.server.getsockname())
+    try:
+        server.handle_new_connection(server.server)
+        connection = next(sock for sock in server.inputs if sock is not server.server)
+        assert calls == [connection]
+        assert connection in server.outputs
+        assert "{}_{}".format(*client.getsockname()) in registry
+    finally:
+        client.close()
+        for sock in server.inputs:
+            sock.close()

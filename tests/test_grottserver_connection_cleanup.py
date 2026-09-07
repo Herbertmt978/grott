@@ -232,3 +232,40 @@ def test_read_error_reaps_registered_connection(server, registries):
     assert connection not in server.outputs
     assert connection not in server.peers
     assert not registries
+
+
+@pytest.mark.parametrize("late_handler", [
+    "close_connection", "handle_readable_socket",
+    "handle_writable_socket", "handle_exceptional_socket",
+])
+def test_same_peer_reconnect_preserves_replacement_queue_and_logger(
+    server, accepted, registries, late_handler, capsys
+):
+    old_connection, client, qname = accepted
+    peer = client.getsockname()
+    old_queue = registries[qname]
+    grottserver.loggerreg["reconnecting"] = {"ip": peer[0], "port": peer[1]}
+    replacement = Mock()
+    listener = Mock()
+    listener.accept.return_value = (replacement, peer)
+
+    # The listener can precede the reset old socket in select's ready list.
+    server.handle_new_connection(listener)
+
+    assert old_connection.fileno() == -1
+    assert old_connection not in server.peers
+    assert not grottserver.loggerreg
+    new_queue = registries[qname]
+    assert new_queue is not old_queue
+    grottserver.loggerreg["reconnecting"] = {"ip": peer[0], "port": peer[1]}
+    new_queue.put(b"replacement ack")
+
+    # Entries already returned by select can still be visited after retirement.
+    getattr(server, late_handler)(old_connection)
+
+    assert registries[qname] is new_queue
+    assert "reconnecting" in grottserver.loggerreg
+    assert server.peers[replacement] == peer
+    server.handle_writable_socket(replacement)
+    replacement.send.assert_called_once_with(b"replacement ack")
+    assert "exception in server thread" not in capsys.readouterr().out

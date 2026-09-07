@@ -952,6 +952,12 @@ class sendrecvserver:
             except OSError as e:
                 # Never refuse a connection because a socket option failed.
                 print("\t - Grottserver - could not enable keepalive: ", e)
+            # A reset peer can reconnect before select reports the old socket.
+            # Retire its queue/logger ownership before publishing a replacement
+            # under the same address/port; late events then see a reaped socket.
+            for previous, peer in list(self.peers.items()):
+                if peer == client_address:
+                    self.close_connection(previous)
             self.inputs.append(connection)
             self.outputs.append(connection)
             print(f"\t - Grottserver - Socket connection received from {client_address}")

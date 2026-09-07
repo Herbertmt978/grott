@@ -10,6 +10,7 @@ drop the send queue or close the file descriptor.
 import ast
 from pathlib import Path
 import socket
+from unittest.mock import Mock
 
 import pytest
 
@@ -40,9 +41,10 @@ def calls_getpeername(node):
 def registries(monkeypatch):
     """grottserver builds these under `if __name__ == "__main__"`, so an
     imported module has neither."""
-    monkeypatch.setattr(grottserver, "send_queuereg", {}, raising=False)
+    # The server owns the supplied registry, not the module's main-only global.
+    monkeypatch.delattr(grottserver, "send_queuereg", raising=False)
     monkeypatch.setattr(grottserver, "loggerreg", {}, raising=False)
-    return grottserver.send_queuereg
+    return {}
 
 
 @pytest.fixture
@@ -91,7 +93,7 @@ def test_closing_after_the_peer_vanished_drops_the_send_queue(
 
 
 @pytest.mark.parametrize(
-    "name", ["close_connection", "handle_writable_socket"]
+    "name", ["handle_new_connection", "close_connection", "handle_writable_socket"]
 )
 def test_cleanup_paths_never_ask_a_dropped_socket_for_its_peer(name):
     """Neither handler may reach for getpeername(): both run at points where
@@ -153,3 +155,39 @@ def test_writable_handler_still_sends_queued_responses(server, accepted, registr
 
     client.settimeout(5)
     assert client.recv(16) == b"\x00\x01ack"
+
+
+def test_accept_uses_returned_peer_when_socket_lookup_already_fails(server, registries):
+    connection = Mock()
+    connection.getpeername.side_effect = OSError("peer disconnected")
+    listener = Mock()
+    listener.accept.return_value = (connection, ("127.0.0.1", 12345))
+
+    server.handle_new_connection(listener)
+
+    connection.getpeername.assert_not_called()
+    assert server.peers[connection] == ("127.0.0.1", 12345)
+    assert "127.0.0.1_12345" in registries
+    server.close_connection(connection)
+    assert "127.0.0.1_12345" not in registries
+    connection.close.assert_called_once()
+
+
+def test_close_removes_only_matching_logger(server, accepted):
+    connection, client, _ = accepted
+    address, port = client.getsockname()
+    grottserver.loggerreg.update({
+        "closed": {"ip": address, "port": port},
+        "other": {"ip": address, "port": port + 1},
+    })
+    server.close_connection(connection)
+    assert set(grottserver.loggerreg) == {"other"}
+
+
+def test_socket_is_closed_even_when_logger_registry_is_malformed(server, accepted, registries):
+    connection, _, qname = accepted
+    grottserver.loggerreg["malformed"] = {}
+    server.close_connection(connection)
+    assert connection.fileno() == -1
+    assert qname not in registries
+    assert connection not in server.peers

@@ -914,14 +914,14 @@ class sendrecvserver:
             self.inputs.append(connection)
             self.outputs.append(connection)
             print(f"\t - Grottserver - Socket connection received from {client_address}")
-            client_address, client_port = connection.getpeername()
-            # Remember the peer while it is still reachable; close_connection()
-            # cannot ask the socket for it once the connection has dropped.
+            # accept() already returned the peer, even if it disconnects before
+            # registration. Do not introduce another socket lookup here.
+            client_address, client_port = client_address
             self.peers[connection] = (client_address, client_port)
             qname = client_address + "_" + str(client_port)
 
             #create queue
-            send_queuereg[qname] = queue.Queue()
+            self.send_queuereg[qname] = queue.Queue()
             #print(send_queuereg)
             if verbose: print(f"\t - Grottserver - Send queue created for : {qname}")
         except Exception as e:
@@ -946,7 +946,7 @@ class sendrecvserver:
             if peer is not None:
                 client_address, client_port = peer
                 qname = client_address + "_" + str(client_port)
-                send_queuereg.pop(qname, None)
+                self.send_queuereg.pop(qname, None)
                 ### after this also clean the logger reg. To be implemented ?
                 for key in list(loggerreg.keys()) :
                     if loggerreg[key]["ip"] == client_address and loggerreg[key]["port"] == client_port :

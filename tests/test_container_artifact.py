@@ -98,6 +98,7 @@ def test_artifact_policy_covers_complete_modules_payload_and_removed_tooling():
         "grott_ha",
     }
     assert {
+        "LICENSE.md",
         "grott.py",
         "grott.ini",
         "grott_ha.py",
@@ -125,6 +126,23 @@ def test_artifact_policy_covers_complete_modules_payload_and_removed_tooling():
         "divide": 10,
     }
     assert generic["pvipmtemperature"]["value"] == 546
+
+
+@pytest.mark.parametrize("line_ending", ["\n", "\r\n"])
+def test_packaged_license_matches_repository(tmp_path, monkeypatch, line_ending):
+    text = (Path(__file__).resolve().parents[1] / "LICENSE.md").read_text(encoding="utf-8")
+    (tmp_path / "LICENSE.md").write_bytes(text.replace("\n", line_ending).encode("utf-8"))
+    monkeypatch.setattr(validate_container_artifact, "APP_DIR", tmp_path)
+    validate_container_artifact.assert_license_contract()
+
+
+@pytest.mark.parametrize("contents", [None, b"", b"# Grott Personal Use License\n", b"\xff"])
+def test_packaged_license_rejects_missing_empty_partial_or_invalid_text(tmp_path, monkeypatch, contents):
+    if contents is not None:
+        (tmp_path / "LICENSE.md").write_bytes(contents)
+    monkeypatch.setattr(validate_container_artifact, "APP_DIR", tmp_path)
+    with pytest.raises(validate_container_artifact.ArtifactValidationError, match="license"):
+        validate_container_artifact.assert_license_contract()
 
 
 def test_generic_layout_contract_rejects_sparse_or_semantically_changed_override():

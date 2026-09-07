@@ -25,7 +25,7 @@ Published images are available on GHCR. The `0.1.12` image targets the same plat
 - `armv7`
 - `i386`
 
-The upstream project does not currently have a repository-level license. This fork preserves attribution and does not add a license to inherited upstream code. On 2026-07-14, the fork owner confirmed that upstream redistribution permission has been obtained for this fork and its container images. That permission does not authorize commercial use or reuse unless Johan Meijer has separately agreed, and any financial reward or appreciation is directed to him. Public release still requires every gate in [RELEASING.md](RELEASING.md); see [docs/LEGAL.md](docs/LEGAL.md) and the upstream discussion in [johanmeijer/grott#512](https://github.com/johanmeijer/grott/issues/512).
+This fork is available for personal, non-commercial use under the [Grott Personal Use License](LICENSE.md). Commercial use requires Johan Meijer's separate written agreement; a donation alone does not grant permission. The license governs the material its copyright holders have authorised to be distributed under it, while third-party licenses and attribution remain intact. See [docs/LEGAL.md](docs/LEGAL.md) for the authorisation record and scope. Public release still requires every gate in [RELEASING.md](RELEASING.md).
 
 ## What Changed In This Fork
 

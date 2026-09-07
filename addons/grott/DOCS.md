@@ -14,7 +14,7 @@ The add-on catalog stage remains `experimental`. The release has been tested wit
 
 `0.1.1-beta` was skipped for users because its first multi-architecture image publish failed. The exact previous live rollback version is the immutable `0.1.12-beta`; the stable `v0.1.12` release will be marked Latest when its matching GitHub release exists.
 
-The public tag may not exist until every release gate passes. On 2026-07-14, the fork owner confirmed that upstream redistribution permission has been obtained for this fork and its container images. That permission does not authorize commercial use or reuse unless Johan Meijer has separately agreed, and any financial reward or appreciation is directed to him. See the root `RELEASING.md`, `docs/LEGAL.md`, and [johanmeijer/grott#512](https://github.com/johanmeijer/grott/issues/512).
+The public tag may not exist until every release gate passes. This fork is available for personal, non-commercial use under the [Grott Personal Use License](../../LICENSE.md). Commercial use requires Johan Meijer's separate written agreement; a donation alone does not grant permission. New images include the license at `/app/LICENSE.md`. See [licensing status](../../docs/LEGAL.md) for its scope and [RELEASING.md](../../RELEASING.md) for publication checks. Historical images retain their recorded terms.
 
 ## Recommended Setup
 

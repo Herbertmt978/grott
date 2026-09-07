@@ -12,11 +12,11 @@ This runbook prepares and verifies the fork's release artifacts. It does not gra
 
 The release images are `ghcr.io/herbertmt978/grott` and `ghcr.io/herbertmt978/grott-ha-docker`. Both must represent the same verified source SHA and the supported platforms `linux/amd64`, `linux/arm64`, `linux/arm/v7`, and `linux/386`.
 
-On 2026-07-14, the fork owner confirmed that upstream redistribution permission has been obtained. Preserve the permission record outside this repository unless upstream publishes an explicit repository licence. This permission record does not authorize commercial use or reuse unless Johan Meijer has separately agreed and any financial reward or appreciation is directed to him.
+The [Grott Personal Use License](LICENSE.md) governs authorised material in this fork. Commercial use requires Johan Meijer's separate written agreement; a donation alone does not grant permission. The fork owner confirmed Johan's authorisation to publish the personal-use license on 2026-09-07. Preserve the permission record outside this repository. See [docs/LEGAL.md](docs/LEGAL.md) for the distinction between this authorisation and the earlier redistribution permission.
 
 Every item below is fail-closed. A missing, ambiguous, or failing item stops the release:
 
-- Explicit upstream licence or written redistribution permission covers the inherited code and built images.
+- Confirm the personal-use license or separate written permission covers the inherited code and built images, preserve third-party notices, and include the complete `LICENSE.md` at `/app/LICENSE.md` in both images. The artifact validator must verify the packaged license. Older immutable releases retain their recorded terms and must not be rewritten to claim this license was included.
 - The default branch is protected, changes reach it through a pull request, and the exact release commit has a current, successful hosted `test` CI result. The pull-request rule must require exactly zero approving reviews, keep stale-review dismissal and last-push approval disabled, and require review threads to be resolved.
 - A protected `release` environment exists and is restricted to the protected default branch. It does not require an independent reviewer.
 - A protected `v*` tag ruleset restricts tag creation, update, and deletion to authorized release maintainers.

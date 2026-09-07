@@ -312,7 +312,8 @@ def test_operator_docs_cover_runtime_filesystem_constraints_and_rollback() -> No
             text,
         )
     for text in (readme, addon_docs, releasing):
-        assert "0.1.12-beta" in text
+        rollback = text.partition("\n## Rollback\n")[2].split("\n## ", 1)[0]
+        assert "`0.1.12`" in rollback
     assert ROLLBACK_RUNTIME_DIGEST in readme
     assert ROLLBACK_ADDON_DIGEST in addon_docs
     assert ROLLBACK_RUNTIME_DIGEST in releasing
@@ -527,20 +528,58 @@ def test_release_validator_requires_named_verified_ha_backup(tmp_path: Path) -> 
     assert any("named verified Home Assistant backup" in error for error in errors)
 
 
+@pytest.mark.parametrize("version", ["0.1.9-beta", "0.1.12", "v0.1.12", "0.1.12-rc.1"])
 def test_release_validator_rejects_historical_addon_reinstall_rollback(
-    tmp_path: Path,
+    tmp_path: Path, version: str,
 ) -> None:
     copy_release_metadata(tmp_path)
     addon_docs_path = tmp_path / "addons/grott/DOCS.md"
     addon_docs_path.write_text(
         addon_docs_path.read_text(encoding="utf-8")
-        + "\nRollback by reinstalling add-on version `0.1.9-beta`.\n",
+        + f"\nRollback by reinstalling add-on version `{version}`.\n",
         encoding="utf-8",
     )
 
     errors = validate_release.validate_worktree(tmp_path)
 
     assert any("historical add-on reinstall" in error for error in errors)
+
+
+@pytest.mark.parametrize("path", ["README.md", "addons/grott/DOCS.md", "RELEASING.md"])
+@pytest.mark.parametrize("mutation", ["version", "digest", "outside_section"])
+def test_release_validator_checks_current_rollback_section(
+    tmp_path: Path, path: str, mutation: str,
+) -> None:
+    copy_release_metadata(tmp_path)
+    document = tmp_path / path
+    before, heading, rollback = document.read_text(encoding="utf-8").partition("\n## Rollback\n")
+    assert heading and "0.1.12-beta" in before
+    if mutation == "version":
+        rollback = rollback.replace("0.1.12", "0.1.11")
+    elif mutation == "digest":
+        rollback = rollback.replace(ROLLBACK_RUNTIME_DIGEST, "sha256:" + "0" * 64)
+    else:
+        before += "\n" + rollback
+        rollback = "See historical context above.\n"
+    document.write_text(before + heading + rollback, encoding="utf-8")
+    errors = validate_release.validate_worktree(tmp_path)
+    assert any("rollback section" in error for error in errors)
+
+
+@pytest.mark.parametrize("path,image", [
+    ("README.md", "grott"),
+    ("addons/grott/DOCS.md", "grott-ha-docker"),
+])
+def test_release_validator_rejects_mislabeled_rollback_image_tag(
+    tmp_path: Path, path: str, image: str,
+) -> None:
+    copy_release_metadata(tmp_path)
+    document = tmp_path / path
+    document.write_text(document.read_text(encoding="utf-8").replace(
+        f"ghcr.io/herbertmt978/{image}:0.1.12", f"ghcr.io/herbertmt978/{image}:0.1.11",
+    ), encoding="utf-8")
+    errors = validate_release.validate_worktree(tmp_path)
+    assert any("rollback section" in error for error in errors)
 
 
 def test_release_validator_derives_current_version_from_addon_config(

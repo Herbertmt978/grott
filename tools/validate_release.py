@@ -64,6 +64,7 @@ STALE_WAIVER_LIFECYCLE_PHRASES = (
     "unpublished candidate add-on metadata",
     "this release is beta software. it is being tested",
 )
+ROLLBACK_VERSION = "0.1.12"
 ROLLBACK_RUNTIME_DIGEST = (
     "sha256:40765fbd328056e39dd0d7752253fd94091551808290995f695ef2fa3753c7a3"
 )
@@ -522,7 +523,7 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
 
     rollback_docs = readme + "\n" + addon_docs + "\n" + releasing
     unsupported_ha_reinstall = re.compile(
-        r"\breinstall(?:ing)?(?:\s+the)?\s+add-on(?:\s+version)?\s+`?\d+\.\d+\.\d+-beta`?",
+        r"\breinstall(?:ing)?(?:\s+the)?\s+add-on(?:\s+version)?\s+`?v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?`?",
         re.IGNORECASE,
     )
     require(
@@ -530,17 +531,27 @@ def validate_release_metadata(root: Path, errors: list[str]) -> None:
         unsupported_ha_reinstall.search(rollback_docs) is None,
         "rollback docs must not recommend historical add-on reinstall from the current repository",
     )
-    require(
-        errors,
-        "0.1.12-beta" in readme
-        and "0.1.12-beta" in addon_docs
-        and "0.1.12-beta" in releasing
-        and ROLLBACK_RUNTIME_DIGEST in readme
-        and ROLLBACK_RUNTIME_DIGEST in releasing
-        and ROLLBACK_ADDON_DIGEST in addon_docs
-        and ROLLBACK_ADDON_DIGEST in releasing,
-        "rollback docs must use the independently verified 0.1.12 manifests",
-    )
+    for path, text in (
+        ("README.md", readme),
+        ("addons/grott/DOCS.md", addon_docs),
+        ("RELEASING.md", releasing),
+    ):
+        rollback = text.partition("\n## Rollback\n")[2].split("\n## ", 1)[0]
+        expected_images = {
+            EXPECTED_RUNTIME_IMAGE: ROLLBACK_RUNTIME_DIGEST,
+            EXPECTED_ADDON_IMAGE: ROLLBACK_ADDON_DIGEST,
+        }
+        image_tags = re.findall(
+            r"ghcr\.io/herbertmt978/grott(?:-ha-docker)?:([0-9A-Za-z.-]+)",
+            rollback,
+        )
+        require(
+            errors,
+            f"`{ROLLBACK_VERSION}`" in rollback
+            and all(f"{image}@{digest}" in rollback for image, digest in expected_images.items())
+            and all(tag in (ROLLBACK_VERSION, f"v{ROLLBACK_VERSION}") for tag in image_tags),
+            f"{path}: rollback section must use the independently verified {ROLLBACK_VERSION} manifests and tags",
+        )
     require(
         errors,
         "ledidobe/grott" not in rollback_docs,
